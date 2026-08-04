@@ -32,3 +32,8 @@ cmd_queue_slots: 16
 
 # Fixed-capacity per-entity modifier stack (CLAUDE.md §5.5).
 modifier_slots: 8
+
+# Entries reserved up front in the CommandLog. See CommandLog's note on
+# the allocation gate: beyond this the log doubles, which is amortised but
+# not free, and the gate will need to account for it.
+command_log_reserve: 4096
