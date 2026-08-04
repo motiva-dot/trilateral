@@ -1,5 +1,54 @@
 # SESSION_LOG.md
 
+## Session 2026-08-04 (#2) — Phase 0 exit gate MET
+Phase: 0 → complete | Tests added/passing: 0 / 0 (still no code — correct)
+
+Repo published public at github.com/motiva-dot/trilateral (chosen over
+private so the `ubuntu-24.04-arm` legs run free — see Ledger → Open Spec
+Conflicts §3, now resolved).
+
+**First CI run (`08e46fe`): 7/8.** All three `build-test` legs, all three
+`determinism` legs and `determinism-compare` passed on the first attempt.
+`lint` failed at `./scripts/ban_floats.sh: Permission denied` (exit 126):
+`bootstrap_repo.sh` runs `chmod +x`, but Git for Windows has `core.filemode`
+off, so both scripts were committed `100644`. Fixed via
+`git update-index --chmod=+x` **and** by having CI invoke
+`bash ./scripts/ban_floats.sh`, so the exec bit is no longer load-bearing.
+PR #1.
+
+**Second run (PR #1): 8/8 green.** Critically, `lint` step 9 (`cargo-deny`)
+*executed* this time rather than being skipped behind the earlier failure —
+so `deny.toml` + the ten `publish.workspace = true` lines are now proven on
+CI, not just locally. Merged with `--rebase` (linear history: `git bisect`
+over a determinism regression is far easier without merge commits).
+
+**Phase 0 exit gate — all three conditions met:**
+- workspace builds on CI on 3 platforms ✅
+- empty-state hash identical across platforms ✅ (`determinism-compare`
+  byte-for-byte on x86-64 Linux / ARM64 Linux / x86-64 Windows)
+- ban_floats green ✅
+
+**Branch protection enabled on `main`** — 5 required checks, admins included,
+linear history, no force-push, no deletion. The invariant is now
+unmergeable-around, which is the point.
+
+**Honest caveat on what is actually proven:** `determinism-compare` is
+currently comparing `headless_sim`'s hardcoded `0xC0FFEE` placeholder. It
+proves the CI plumbing and the artifact-comparison mechanism work end to end.
+It proves nothing about any arithmetic. Phase 1's committed golden fuzz hash
+is the first time this check has real maths to be wrong about.
+
+**Still open:** no `LICENSE` file on a public repo (sits awkwardly against
+MARKET_POSITION's openness argument); alignment session not yet run.
+
+**Next session should:**
+1. Run the alignment session (OPERATIONS §2) — or record what was already
+   established, and log it as entry #3.
+2. Decide the licence.
+3. Begin Phase 1 `trilateral_fixed` under the SOP. Decide first whether the
+   test contracts are human-authored (OPERATIONS §3.2 prescribes exactly that
+   for math crates) or agent-authored and human-reviewed.
+
 ## Session 2026-08-03 (#1) — Day Zero: machine setup + Phase 0 (local half)
 Phase: 0 | Completed: DAY_ZERO_SETUP steps 1–6, local half of Phase 0
 Tests added/passing: 0 / 0 (no code yet — correct for Phase 0)
