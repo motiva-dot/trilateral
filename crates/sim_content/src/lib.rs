@@ -27,6 +27,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod engine;
 pub mod tech;
 
+pub use engine::capacities_from_yaml;
 pub use tech::{ContentError, Effect, EffectValue, Tech, TechKind, TechRegistry};

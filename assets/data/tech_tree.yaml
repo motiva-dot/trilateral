@@ -65,7 +65,30 @@ murmur:
     cost: { ore: 200, flux: 200, ticks: 3300 }
     requires: [mur_weapons_2, mur_apex_chamber]
     effects: [{ stat: attack_damage, add: 1, applies_to: race:murmur }]
-  # (mirror armor_1..3 track omitted for brevity — same shape)
+  # Armor track. PLACEHOLDER COSTS — generic 100/200/300 ladder, same shape
+  # as weapons. The v2 file omitted these "for brevity"; GAME_DESIGN §3 calls
+  # for 3 levels of armor per race, so they exist now rather than being
+  # discovered missing at Phase 7.
+  - id: mur_armor_1
+    tier: 2
+    kind: upgrade
+    cost: { ore: 100, flux: 100, ticks: 2400 }
+    requires: [mur_deep_warren]
+    effects: [{ stat: armor, add: 1, applies_to: race:murmur }]
+    track: { next: mur_armor_2 }
+  - id: mur_armor_2
+    tier: 2
+    kind: upgrade
+    cost: { ore: 200, flux: 200, ticks: 2850 }
+    requires: [mur_armor_1]
+    effects: [{ stat: armor, add: 1, applies_to: race:murmur }]
+    track: { next: mur_armor_3 }
+  - id: mur_armor_3
+    tier: 3
+    kind: upgrade
+    cost: { ore: 300, flux: 300, ticks: 3300 }
+    requires: [mur_armor_2, mur_apex_chamber]
+    effects: [{ stat: armor, add: 1, applies_to: race:murmur }]
 
   # ---- Tier 3 (heavy Flux: build mur_apex_chamber) ----
   - id: mur_t3_gate
@@ -152,6 +175,27 @@ bastion:
     cost: { ore: 300, flux: 300, ticks: 3300 }
     requires: [bas_weapons_2, bas_grand_forge]
     effects: [{ stat: attack_damage, add: 1, applies_to: race:bastion }]
+  # Armor track. PLACEHOLDER COSTS — generic 100/200/300 ladder.
+  - id: bas_armor_1
+    tier: 2
+    kind: upgrade
+    cost: { ore: 100, flux: 100, ticks: 2400 }
+    requires: [bas_machine_works]
+    effects: [{ stat: armor, add: 1, applies_to: race:bastion }]
+    track: { next: bas_armor_2 }
+  - id: bas_armor_2
+    tier: 2
+    kind: upgrade
+    cost: { ore: 200, flux: 200, ticks: 2850 }
+    requires: [bas_armor_1]
+    effects: [{ stat: armor, add: 1, applies_to: race:bastion }]
+    track: { next: bas_armor_3 }
+  - id: bas_armor_3
+    tier: 3
+    kind: upgrade
+    cost: { ore: 300, flux: 300, ticks: 3300 }
+    requires: [bas_armor_2, bas_grand_forge]
+    effects: [{ stat: armor, add: 1, applies_to: race:bastion }]
 
   - id: bas_t3_gate
     tier: 3
@@ -232,6 +276,27 @@ concord:
     cost: { ore: 300, flux: 300, ticks: 3300 }
     requires: [con_weapons_2, con_zenith_spire]
     effects: [{ stat: attack_damage, add: 1, applies_to: race:concord }]
+  # Armor track. PLACEHOLDER COSTS — generic 100/200/300 ladder.
+  - id: con_armor_1
+    tier: 2
+    kind: upgrade
+    cost: { ore: 100, flux: 100, ticks: 2400 }
+    requires: [con_resonance_court]
+    effects: [{ stat: armor, add: 1, applies_to: race:concord }]
+    track: { next: con_armor_2 }
+  - id: con_armor_2
+    tier: 2
+    kind: upgrade
+    cost: { ore: 200, flux: 200, ticks: 2850 }
+    requires: [con_armor_1]
+    effects: [{ stat: armor, add: 1, applies_to: race:concord }]
+    track: { next: con_armor_3 }
+  - id: con_armor_3
+    tier: 3
+    kind: upgrade
+    cost: { ore: 300, flux: 300, ticks: 3300 }
+    requires: [con_armor_2, con_zenith_spire]
+    effects: [{ stat: armor, add: 1, applies_to: race:concord }]
 
   - id: con_t3_gate
     tier: 3

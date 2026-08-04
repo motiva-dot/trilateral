@@ -355,6 +355,30 @@ mod tests {
                 assert_eq!(t.cost.flux, expected, "{id} flux");
             }
         }
+        // Armor is placeholder for ALL THREE races — the v2 file omitted it
+        // entirely, so there is no authored content to preserve here.
+        for race in ["mur", "bas", "con"] {
+            for (level, expected) in [(1, 100), (2, 200), (3, 300)] {
+                let id = format!("{race}_armor_{level}");
+                let t = reg.get(&id).unwrap_or_else(|| panic!("{id} missing"));
+                assert_eq!(t.cost.ore, expected, "{id} ore");
+                assert_eq!(t.cost.flux, expected, "{id} flux");
+            }
+        }
+    }
+
+    #[test]
+    fn every_race_has_three_levels_of_weapons_and_armor() {
+        // GAME_DESIGN §3: "3 levels each for ground weapons / armor per race".
+        let reg = TechRegistry::from_yaml(REAL_TECH_TREE).unwrap();
+        for race in ["mur", "bas", "con"] {
+            for track in ["weapons", "armor"] {
+                for level in 1..=3 {
+                    let id = format!("{race}_{track}_{level}");
+                    assert!(reg.get(&id).is_some(), "{id} missing");
+                }
+            }
+        }
     }
 
     #[test]
