@@ -260,6 +260,45 @@ pub fn update_settle(
     state.c.stuck_ticks[n] >= p.settle_stuck_ticks
 }
 
+/// Build per-unit neighbour candidate lists for this tick, in CSR form.
+///
+/// One broad-phase query per unit per TICK rather than per unit per PASS.
+/// Corrections within a tick are a fraction of a cell, so the candidate set is
+/// the same for every pass — recomputing it was pure waste, and at three
+/// passes it was most of the steering budget.
+///
+/// Lists stay ascending (the spatial query guarantees it) because §6.9 makes
+/// that ordering gameplay, and truncation at `max_cached_neighbours` therefore
+/// drops a deterministic set rather than an arbitrary one.
+fn build_neighbour_cache(state: &SimState, reg: &Registries, ctx: &mut SimContext) {
+    /// Generous: a unit with more overlapping candidates than this is in a
+    /// pile far denser than `max_neighbours` would resolve anyway.
+    const MAX_CACHED: usize = 48;
+
+    let cap = state.c.capacity() as usize;
+    ctx.neighbour_data.clear();
+    ctx.neighbour_start.clear();
+    ctx.neighbour_start.push(0);
+
+    let max_r = reg.units.max_collider_radius();
+    for i in 0..cap as u32 {
+        if state.c.alive.get(i) {
+            let ri = radius_of(state, reg, i);
+            if ri > Fixed::ZERO {
+                ctx.spatial.query_square(
+                    state.c.pos[i as usize],
+                    ri + max_r,
+                    &mut ctx.query_scratch,
+                );
+                let take = ctx.query_scratch.len().min(MAX_CACHED);
+                ctx.neighbour_data
+                    .extend_from_slice(&ctx.query_scratch[..take]);
+            }
+        }
+        ctx.neighbour_start.push(ctx.neighbour_data.len() as u32);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -556,44 +595,5 @@ mod tests {
             s.hash()
         }
         assert_eq!(run(), run());
-    }
-}
-
-/// Build per-unit neighbour candidate lists for this tick, in CSR form.
-///
-/// One broad-phase query per unit per TICK rather than per unit per PASS.
-/// Corrections within a tick are a fraction of a cell, so the candidate set is
-/// the same for every pass — recomputing it was pure waste, and at three
-/// passes it was most of the steering budget.
-///
-/// Lists stay ascending (the spatial query guarantees it) because §6.9 makes
-/// that ordering gameplay, and truncation at `max_cached_neighbours` therefore
-/// drops a deterministic set rather than an arbitrary one.
-fn build_neighbour_cache(state: &SimState, reg: &Registries, ctx: &mut SimContext) {
-    /// Generous: a unit with more overlapping candidates than this is in a
-    /// pile far denser than `max_neighbours` would resolve anyway.
-    const MAX_CACHED: usize = 48;
-
-    let cap = state.c.capacity() as usize;
-    ctx.neighbour_data.clear();
-    ctx.neighbour_start.clear();
-    ctx.neighbour_start.push(0);
-
-    let max_r = reg.units.max_collider_radius();
-    for i in 0..cap as u32 {
-        if state.c.alive.get(i) {
-            let ri = radius_of(state, reg, i);
-            if ri > Fixed::ZERO {
-                ctx.spatial.query_square(
-                    state.c.pos[i as usize],
-                    ri + max_r,
-                    &mut ctx.query_scratch,
-                );
-                let take = ctx.query_scratch.len().min(MAX_CACHED);
-                ctx.neighbour_data
-                    .extend_from_slice(&ctx.query_scratch[..take]);
-            }
-        }
-        ctx.neighbour_start.push(ctx.neighbour_data.len() as u32);
     }
 }
