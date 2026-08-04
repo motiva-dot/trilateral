@@ -1,5 +1,19 @@
 # SESSION_LOG.md
 
+## FEEL CHECKPOINT 1 — RESULT: PASSED (2026-08-04, after the feel pass)
+Architect on the retuned build: **"an improvement in each way ... felt a lot
+more organic and natural and was clearly improved."** Not perfect, and
+explicitly not worth iterating further right now — the specificity comes later,
+once there is gameplay to sculpt the feel around.
+
+So the four knobs stand as tuned: separation_response 0.85, 3 relaxation
+passes, settle_stuck_ticks 45, settle_progress_fraction 0.06 — plus the
+queuing rule and the rim shading. Feel Checkpoint 1 is CLOSED.
+
+**Standing instruction from the architect:** keep vetting, hardening and
+iterating; do not over-tune feel at this stage. Revisit the numbers when the
+economy and combat exist to judge them against.
+
 ## FEEL CHECKPOINT 1 — 2026-08-04. First real feel data. VERDICT: needs work.
 
 Architect ran the obstacle map and reported, verbatim in substance:

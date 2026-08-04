@@ -97,6 +97,33 @@ jobs:
           done
           echo "Determinism verified across all platforms."
 
+  # --------------------------------------------------------------
+  # Revived at Phase 4 (ADR-001). Two checks, one cheap and one important.
+  #
+  # `--verify` is the important one: the bench composes the §3.2 pipeline by
+  # hand, because §1.2 bans `Instant` from simulation crates so `tick()`
+  # cannot time itself. That hand-composed copy can drift, at which point the
+  # bench measures something that is not the game. `--verify` runs both for
+  # 300 ticks and compares state hashes.
+  #
+  # `--check-budgets` enforces the TECH_SPEC §9 CEILINGS, not run-to-run
+  # deltas. Shared runners are noisy enough that a 15% threshold against a
+  # committed baseline would flap constantly; a ceiling with real headroom
+  # (measured at 2.8ms total against an 8ms target) fails only when something
+  # got genuinely slower.
+  # --------------------------------------------------------------
+  bench-regression:
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Bench pipeline has not drifted from sim_systems::tick()
+        run: cargo run --release --locked -p tools --bin bench_match -- --verify
+      - name: Per-system budgets (TECH_SPEC §9)
+        run: cargo run --release --locked -p tools --bin bench_match -- --check-budgets
+
 # ================================================================
 # JOBS BELOW ARE DORMANT UNTIL THE CODE THEY TEST EXISTS.
 #
@@ -109,9 +136,12 @@ jobs:
 #
 # UNCOMMENT EACH ONE IN ITS OWN PHASE. Do not uncomment early "to have it
 # ready" — a permanently-red required check is worse than a missing one.
-#   allocation-gate   → Phase 2 (needs tools/tests/alloc_gate.rs + SimState)
-#   bench-regression  → Phase 3 (needs tools/src/bin/bench_match.rs +
-#                                benches/baselines.toml)
+#   allocation-gate   → still dormant. Needs tools/tests/alloc_gate.rs and a
+#                       counting allocator. The one known complication is the
+#                       CommandLog, which grows with match length and is the
+#                       single buffer §1.4 cannot fully pre-size — see the
+#                       note on `CommandLog`.
+#   bench-regression  → REVIVED at Phase 4, above.
 #   map-check         → Phase 6 (needs tools/src/bin/map_check.rs + real maps
 #                                under assets/data/maps/)
 # Re-add each to branch protection's required checks at the same time.
