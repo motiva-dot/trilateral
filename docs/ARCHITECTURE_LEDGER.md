@@ -1,9 +1,9 @@
 # ARCHITECTURE_LEDGER.md — Claude Code's Long-Term Memory
 
 ## Current State
-- Phase: **0 COMPLETE** — exit gate met 2026-08-04. Next: Phase 1
-  (`trilateral_fixed`), preceded by the alignment session.
-- Last session: 2026-08-04 (#2) | Tests: none yet (no code)
+- Phase: **1 COMPLETE** — exit gate met 2026-08-04. Next: Phase 2
+  (SoA SimState + registries). Build order is v3 — see IMPLEMENTATION_PLAN.
+- Last session: 2026-08-04 (#3) | Tests: 80, green on 3 architectures
 - CI: **8/8 green on 3 architectures.** Repo is public at
   github.com/motiva-dot/trilateral so the `ubuntu-24.04-arm` legs run free.
 - `main` is branch-protected: 5 required checks (`lint`, all three
@@ -17,7 +17,14 @@
   guardrail scripts run natively — no `xtask` port needed).
 
 ## Crate Status
-- trilateral_fixed: stub (deps: serde) — Phase 1 target
+- **trilateral_fixed: COMPLETE (Phase 1).** `Fixed` (Q32.32/i64), `FixedVec2`,
+  `FixedAngle` (u32, full turn = 2^32), `tables.rs` (generated, committed),
+  optional `float_bridge` feature. 80 tests, green in debug and release, on
+  all three architectures. **Golden hash `0x3373a9ec5352e0b7`** over 10k mixed
+  ops, seed 42 — `crates/trilateral_fixed/tests/golden.rs`. Key names:
+  `Fixed::{from_ratio, mul, div, sqrt, lerp}`, `FixedVec2::{length_sq_wide,
+  normalize, clamp_length, perp, rotate}`, `FixedAngle::{sin, cos, atan2,
+  shortest_diff, turn_toward}`.
 - sim_core: stub (deps: trilateral_fixed, serde, smallvec)
 - sim_systems: stub (deps: sim_core)
 - sim_content: stub (deps: sim_core)
@@ -69,7 +76,57 @@ Dependency Ban) is actually *enforced* — `[bans].deny` is empty today because
 the graph is only serde + smallvec; it must be populated as wgpu/winit/quinn/
 kira enter the outer crates, so they can never be pulled down into sim code.
 
+### ADR-003 — Trig tables are generated offline and committed, never built
+**Date:** 2026-08-04
+**Decision:** `crates/trilateral_fixed/src/tables.rs` is produced by
+`cargo run -p tools --bin gen_tables` and committed as integer literals. There
+is no `build.rs`.
+**Context:** The tables need `sin`/`atan`, which means floats somewhere. A
+build script confines the float to build time, which *sounds* safe.
+**Alternatives:** (a) `build.rs` — **rejected**: it recomputes the table on
+every machine that builds the project, so a slightly different libm on one
+developer's box silently produces a different table and a desync that surfaces
+at Phase 5 with no obvious cause. This is the cross-platform float hazard
+fixed-point exists to eliminate, reintroduced through the back door.
+(b) `const fn` integer CORDIC at compile time — viable and elegant, but needs
+the atan constants anyway, and const-eval of 130k operations buys nothing over
+a committed table you can read.
+**Consequences:** Regenerating the tables and getting different numbers is a
+determinism-breaking change requiring an ADR; it invalidates every stored
+replay. The generator's output cross-checked the hand-written `PI`/`TAU`/
+`FRAC_PI_2` constants exactly, and `atan(2^0)` emerged as 536870912 = 2^32/8 =
+exactly 45 degrees, which is the table validating itself.
+
+### ADR-004 — Rounding asymmetry between `mul` and `div` is deliberate
+**Date:** 2026-08-04
+**Decision:** `Fixed::mul` rounds toward negative infinity (arithmetic `>>`),
+`Fixed::div` truncates toward zero (integer `/`). Per TECH_SPEC §2 verbatim.
+**Consequences:** They disagree for negative operands. This is **not** a bug to
+be tidied later: the golden hash and every future replay encode it. Changing
+either rule is a determinism break needing its own ADR. Both rules are stated
+in the `fixed.rs` module header and pinned by tests so that the next person to
+notice the asymmetry finds the reason before the edit button.
+
 ## Gotchas & Lessons
+
+- **`ban_floats.sh` needed a second fix at Phase 1, as predicted.** Per-line
+  `// FLOAT_EXCEPTION:` markers do not work for a whole module: the script
+  matches line by line, so a marker above a function signature never applies to
+  it. Added file-level exemption via `//! FLOAT_EXCEPTION_FILE: <reason>`,
+  which **prints the waiver and its reason on every run** — an invisible waiver
+  is a waiver that rots. Verified the exemption is file-scoped, not
+  crate-scoped: a float in `trilateral_fixed` outside `float_bridge.rs` still
+  fails.
+
+- **`FixedAngle::from_degrees` is exact only for power-of-two divisors of the
+  turn.** 2^32/360 is not an integer, so most degree values round, and the
+  difference of two rounded angles is not the rounded difference — 350 and 10
+  degrees land one raw unit off `from_degrees(20)`. Use `from_turn_ratio` with
+  a power of two whenever exactness matters. Pinned as a test.
+
+- **`sqrt`'s maximality cannot be expressed via `Fixed::sq`.** At 1 ULP both
+  65536^2 and 65537^2 floor to the same `Fixed` after the `>>32`. The contract
+  lives in i128, before the shift discards it.
 
 - **`ban_floats.sh` was silently over-reporting.** Its EXCEPTION_PATTERNS are
   anchored (`^\s*//`) but were being matched against `grep -n` output, which
