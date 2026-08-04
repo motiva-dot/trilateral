@@ -221,8 +221,10 @@ dependencies = [
 name = "tools"
 version = "0.1.0"
 dependencies = [
+ "sim_content",
  "sim_core",
  "sim_systems",
+ "trilateral_fixed",
 ]
 
 [[package]]

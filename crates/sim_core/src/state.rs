@@ -20,6 +20,7 @@ use trilateral_fixed::FixedVec2;
 
 use crate::capacities::Capacities;
 use crate::clock::SimClock;
+use crate::command::{CommandLog, IssuedCommand, Reject};
 use crate::components::Components;
 use crate::entity::EntityAllocator;
 use crate::hash::SimHasher;
@@ -33,6 +34,7 @@ pub struct SimState {
     pub rng: SimRng,
     pub entities: EntityAllocator,
     pub c: Components,
+    pub cmd_log: CommandLog,
 }
 
 /// What a spawn needs that the caller must supply. Stats such as max HP come
@@ -63,6 +65,25 @@ impl SimState {
             rng: SimRng::from_seed(seed),
             entities: EntityAllocator::with_capacity(capacities.max_entities),
             c: Components::new(capacities.max_entities),
+            cmd_log: CommandLog::with_reserve(capacities.command_log_reserve),
+        }
+    }
+
+    /// Validate and record a command. §4: invalid commands are dropped and
+    /// counted, never obeyed and never a panic.
+    ///
+    /// Returns the rejection reason if it was dropped, so callers can surface
+    /// it (a UI bark locally, telemetry for a networked peer).
+    pub fn ingest(&mut self, cmd: IssuedCommand) -> Result<(), Reject> {
+        match crate::command::validate(self, &cmd) {
+            Ok(()) => {
+                self.cmd_log.push(cmd);
+                Ok(())
+            }
+            Err(r) => {
+                self.cmd_log.record_rejection();
+                Err(r)
+            }
         }
     }
 
@@ -126,6 +147,7 @@ impl SimState {
         }
         self.entities.hash_into(&mut h);
         self.c.hash_into(&mut h);
+        self.cmd_log.hash_into(&mut h);
         h.finish()
     }
 }
@@ -143,6 +165,7 @@ mod tests {
             max_players: 8,
             cmd_queue_slots: 16,
             modifier_slots: 8,
+            command_log_reserve: 1024,
         }
     }
 

@@ -5,8 +5,10 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+sim_content.workspace = true
 sim_core = { workspace = true }
 sim_systems = { workspace = true }
+trilateral_fixed.workspace = true
 
 [[bin]]
 name = "headless_sim"

@@ -26,6 +26,13 @@ pub struct Capacities {
     pub cmd_queue_slots: u8,
     /// Fixed-capacity per-entity modifier stack.
     pub modifier_slots: u8,
+    /// Entries reserved up front in the `CommandLog`.
+    ///
+    /// The log is append-only and grows with match length, so it is the one
+    /// buffer §1.4 cannot fully pre-size. Reserving covers a typical match;
+    /// beyond it the vector doubles, which is rare and amortised but not free.
+    /// See the note on `CommandLog` about the allocation gate.
+    pub command_log_reserve: u32,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -91,6 +98,7 @@ impl Capacities {
         h.write_u8(self.max_players);
         h.write_u8(self.cmd_queue_slots);
         h.write_u8(self.modifier_slots);
+        h.write_u32(self.command_log_reserve);
     }
 }
 
@@ -109,6 +117,7 @@ mod tests {
             max_players: 8,
             cmd_queue_slots: 16,
             modifier_slots: 8,
+            command_log_reserve: 1024,
         }
     }
 

@@ -24,6 +24,7 @@
 pub mod bitset;
 pub mod capacities;
 pub mod clock;
+pub mod command;
 pub mod components;
 pub mod entity;
 pub mod hash;
@@ -34,6 +35,7 @@ pub mod state;
 pub use bitset::BitSet;
 pub use capacities::{Capacities, CapacityError};
 pub use clock::{SimClock, Tick};
+pub use command::{AbilityId, AbilityTarget, Command, CommandLog, IssuedCommand, Reject};
 pub use components::{Components, UnitState};
 pub use entity::EntityAllocator;
 pub use hash::SimHasher;

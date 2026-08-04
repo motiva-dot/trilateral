@@ -37,6 +37,7 @@ mod tests {
         assert_eq!(c.max_players, 8);
         assert_eq!(c.cmd_queue_slots, 16);
         assert_eq!(c.modifier_slots, 8);
+        assert_eq!(c.command_log_reserve, 4096);
     }
 
     #[test]
@@ -65,6 +66,7 @@ max_commands_per_tick: 16
 max_players: 2
 cmd_queue_slots: 4
 modifier_slots: 2
+command_log_reserve: 64
 max_entites: 99
 ";
         // Note the typo above — `max_entites`. Silently ignoring it would give
@@ -81,6 +83,7 @@ max_commands_per_tick: 16
 max_players: 2
 cmd_queue_slots: 4
 modifier_slots: 2
+command_log_reserve: 64
 ";
         let err = capacities_from_yaml(src).unwrap_err().to_string();
         assert!(err.contains("max_entities"), "{err}");
