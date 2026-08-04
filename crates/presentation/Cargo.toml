@@ -5,4 +5,33 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+bytemuck = { version = "1.25.2", features = ["derive"] }
+pollster = "1.0.1"
 sim_core = { workspace = true }
+sim_systems.workspace = true
+# float_bridge: presentation interpolates between ticks with an f64 alpha
+# (TECH_SPEC §8) and must convert Fixed positions to draw them. This is the
+# other sanctioned side of the bridge; the sim never sees the result.
+trilateral_fixed = { workspace = true, features = ["float_bridge"] }
+wgpu = "30.0.0"
+
+# `wayland-csd-adwaita` is deliberately OFF.
+#
+# It is a winit DEFAULT feature that draws Wayland client-side decorations,
+# and it pulls sctk-adwaita -> ab_glyph -> owned_ttf_parser -> ttf-parser,
+# which is unmaintained (RUSTSEC-2026-0192, no safe upgrade available).
+# cargo-deny caught it the moment winit was added.
+#
+# The cost is plain server-side decorations on Wayland. The benefit is one
+# fewer unmaintained font parser in a tree that has no business parsing fonts
+# yet — text arrives at Phase 9 via glyphon, on purpose and with a choice
+# made deliberately rather than inherited from a window decoration.
+#
+# `rwh_06` must stay on: wgpu 30 talks to the window through
+# raw-window-handle 0.6.
+winit = { version = "0.30.13", default-features = false, features = [
+    "x11",
+    "wayland",
+    "wayland-dlopen",
+    "rwh_06",
+] }
