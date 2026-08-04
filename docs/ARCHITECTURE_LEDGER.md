@@ -1,8 +1,18 @@
 # ARCHITECTURE_LEDGER.md — Claude Code's Long-Term Memory
 
 ## Current State
-- Phase: 0 (in progress) | Last session: 2026-08-03 (#1, day zero)
-- Tests: none yet (no code) | CI: authored, not yet run on GitHub
+- Phase: **0 COMPLETE** — exit gate met 2026-08-04. Next: Phase 1
+  (`trilateral_fixed`), preceded by the alignment session.
+- Last session: 2026-08-04 (#2) | Tests: none yet (no code)
+- CI: **8/8 green on 3 architectures.** Repo is public at
+  github.com/motiva-dot/trilateral so the `ubuntu-24.04-arm` legs run free.
+- `main` is branch-protected: 5 required checks (`lint`, all three
+  `build-test` legs, `determinism-compare`), `enforce_admins: true`,
+  linear history required, force-push and deletion disabled. **Direct pushes
+  to `main` are impossible for everyone, including the architect — all work
+  from Phase 1 on goes through a PR.** The three `determinism` legs are not
+  listed individually because `determinism-compare` `needs:` them, so a
+  failed leg leaves it never-reported and the merge blocked anyway.
 - Host dev machine: Windows 11, MSVC toolchain, Git Bash present (the `.sh`
   guardrail scripts run natively — no `xtask` port needed).
 
@@ -33,9 +43,10 @@ green check that asserts nothing is a lie told to your future self, and the
 allocation gate in particular would be trusted before it measures anything;
 (b) `if: false` — rejected, GitHub's treatment of skipped jobs as satisfying
 required checks is a subtlety not worth depending on.
-**Consequences:** Branch protection at Phase 0 requires four checks, not
-seven. Each revival is a line item in its phase and must re-add the check to
-branch protection at the same time. IMPLEMENTATION_PLAN's "the arena never
+**Consequences:** Branch protection requires five checks today, not eight.
+Each revival is a line item in its phase and must re-add the check to branch
+protection at the same time (`gh api -X PUT
+repos/motiva-dot/trilateral/branches/main/protection`). IMPLEMENTATION_PLAN's "the arena never
 shrinks" rule now has a sibling: the job list only ever grows.
 
 ### ADR-002 — `publish = false` + `deny.toml` are coupled
