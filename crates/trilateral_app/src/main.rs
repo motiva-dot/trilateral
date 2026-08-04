@@ -11,13 +11,14 @@
 //!   right click    move order   space   pause      esc  quit
 
 use presentation::app::DebugApp;
-use sim_content::{capacities_from_yaml, units_from_yaml};
+use sim_content::{capacities_from_yaml, steering_from_yaml, units_from_yaml};
 use sim_core::{ArchetypeId, PlayerId, Registries, SimState, Spawn};
 use trilateral_fixed::{Fixed, FixedVec2};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 const ENGINE_YAML: &str = include_str!("../../../assets/data/engine.yaml");
 const UNITS_YAML: &str = include_str!("../../../assets/data/units.yaml");
+const STEERING_YAML: &str = include_str!("../../../assets/data/steering.yaml");
 
 /// PRD §4: prototype maps are 128x128 tiles.
 const WORLD_TILES: i32 = 128;
@@ -28,6 +29,7 @@ fn main() {
     let caps = capacities_from_yaml(ENGINE_YAML).expect("engine.yaml");
     let reg = Registries {
         units: units_from_yaml(UNITS_YAML).expect("units.yaml"),
+        steering: steering_from_yaml(STEERING_YAML).expect("steering.yaml"),
     };
     let mut state = SimState::new(caps, 42);
     populate(&mut state, &reg);

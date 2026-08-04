@@ -56,6 +56,11 @@ pub struct Components {
     pub incoming_dmg: Box<[i32]>,
     pub state: Box<[UnitState]>,
     pub target: Box<[OptionalHandle]>,
+    /// Consecutive ticks a `Moving` unit has failed to make progress.
+    /// Drives the settle rule (TECH_SPEC §5.2) — a unit jammed against
+    /// idle friends near its destination gives up rather than shoving
+    /// forever, which is what stops a crowd vibrating.
+    pub stuck_ticks: Box<[u8]>,
 }
 
 impl Components {
@@ -76,6 +81,7 @@ impl Components {
             incoming_dmg: vec![0i32; n].into_boxed_slice(),
             state: vec![UnitState::Idle; n].into_boxed_slice(),
             target: vec![OptionalHandle::NONE; n].into_boxed_slice(),
+            stuck_ticks: vec![0u8; n].into_boxed_slice(),
         }
     }
 
@@ -102,6 +108,7 @@ impl Components {
         self.incoming_dmg[n] = 0;
         self.state[n] = UnitState::Idle;
         self.target[n] = OptionalHandle::NONE;
+        self.stuck_ticks[n] = 0;
     }
 
     /// Fold every array, in declared order.
@@ -129,6 +136,9 @@ impl Components {
             let (i, g) = v.raw();
             h.write_u32(i);
             h.write_u32(g);
+        }
+        for v in &self.stuck_ticks {
+            h.write_u8(*v);
         }
     }
 }
@@ -158,6 +168,7 @@ pub fn slot_is_clear(c: &Components, i: EntityIndex) -> bool {
         && c.incoming_dmg[n] == 0
         && c.state[n] == UnitState::Idle
         && c.target[n] == OptionalHandle::NONE
+        && c.stuck_ticks[n] == 0
 }
 
 #[cfg(test)]

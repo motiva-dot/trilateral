@@ -180,6 +180,7 @@ impl UnitRegistry {
 #[derive(Clone, Debug, Default)]
 pub struct Registries {
     pub units: UnitRegistry,
+    pub steering: SteeringParams,
 }
 
 #[cfg(test)]
@@ -239,5 +240,36 @@ mod tests {
     #[test]
     fn an_empty_registry_has_zero_max_radius_rather_than_panicking() {
         assert_eq!(UnitRegistry::default().max_collider_radius(), Fixed::ZERO);
+    }
+}
+
+/// Local-avoidance tuning, from `assets/data/steering.yaml`. TECH_SPEC §5.2.
+///
+/// Feel, not capacity. PRD §7 makes clumping and shoving deliberately tunable
+/// because "some friction creates positional skill" — these are the knobs that
+/// friction lives in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SteeringParams {
+    /// Fraction of an overlap resolved per tick.
+    pub separation_response: Fixed,
+    /// Ticks of no progress before a mover settles.
+    pub settle_stuck_ticks: u8,
+    /// Fraction of full speed below which a tick counts as no progress.
+    pub settle_progress_fraction: Fixed,
+    /// Hard bound on neighbours resolved per unit per tick.
+    pub max_neighbours: u16,
+}
+
+impl Default for SteeringParams {
+    /// Only for tests and tools. Real values come from YAML (§1.8); a default
+    /// that silently differed from the file would be a desync between a client
+    /// that loaded content and one that did not.
+    fn default() -> Self {
+        SteeringParams {
+            separation_response: Fixed::from_ratio(45, 100),
+            settle_stuck_ticks: 12,
+            settle_progress_fraction: Fixed::from_ratio(25, 100),
+            max_neighbours: 16,
+        }
     }
 }
