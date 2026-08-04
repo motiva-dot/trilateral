@@ -20,9 +20,12 @@
 
 #![forbid(unsafe_code)]
 
+mod angle;
 mod fixed;
+mod tables;
 mod vec2;
 
+pub use angle::FixedAngle;
 pub use fixed::{FRAC_BITS, Fixed, ONE_BITS};
 pub use vec2::FixedVec2;
 
