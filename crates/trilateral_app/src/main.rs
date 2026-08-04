@@ -32,6 +32,7 @@ fn main() {
         steering: steering_from_yaml(STEERING_YAML).expect("steering.yaml"),
     };
     let mut state = SimState::new(caps, 42, WORLD_TILES as u16);
+    build_obstacles(&mut state);
     populate(&mut state, &reg);
 
     println!(
@@ -48,6 +49,49 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = DebugApp::new(state, reg, WORLD_TILES);
     event_loop.run_app(&mut app).expect("event loop");
+}
+
+/// Walls, so there is something to path *around*.
+///
+/// Until now the demo map was empty, which meant the pathfinder was provably
+/// correct and completely invisible — a straight line across open ground looks
+/// identical whether A\* produced it or a beeline did. These obstacles exist
+/// purely so the behaviour can be judged by eye: a long wall with one gap, a
+/// pillar field that forces constant small course corrections, and a corridor
+/// narrow enough that a group has to file through it.
+///
+/// Not a real map. Maps are RON files with symmetry validation (GAME_DESIGN
+/// §6) and arrive at Phase 6; this is scaffolding for looking at movement.
+fn build_obstacles(state: &mut SimState) {
+    use sim_core::Tile;
+
+    // A long wall with a single gap, between the two upper clusters.
+    for y in 8..46u16 {
+        if !(26..30).contains(&y) {
+            state.grid.set_walkable(Tile::new(44, y), false);
+        }
+    }
+
+    // A pillar field. Each is small enough to walk past, dense enough that a
+    // group crossing it has to keep adjusting — the case where jitter and
+    // oscillation show up if the steering is wrong.
+    for gx in 0..6u16 {
+        for gy in 0..4u16 {
+            let x = 20 + gx * 5;
+            let y = 40 + gy * 5;
+            state.grid.set_walkable(Tile::new(x, y), false);
+            state.grid.set_walkable(Tile::new(x + 1, y), false);
+            state.grid.set_walkable(Tile::new(x, y + 1), false);
+            state.grid.set_walkable(Tile::new(x + 1, y + 1), false);
+        }
+    }
+
+    // A corridor two tiles wide. A group ordered through it must file, which
+    // is where the settle rule and the pathing budget are most visible.
+    for x in 60..100u16 {
+        state.grid.set_walkable(Tile::new(x, 60), false);
+        state.grid.set_walkable(Tile::new(x, 63), false);
+    }
 }
 
 /// A readable starting arrangement: three blocks of units, one per player,
