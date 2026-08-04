@@ -21,14 +21,22 @@
 
 #![forbid(unsafe_code)]
 
+pub mod bitset;
+pub mod capacities;
 pub mod clock;
+pub mod components;
 pub mod entity;
 pub mod hash;
 pub mod ids;
 pub mod rng;
+pub mod state;
 
+pub use bitset::BitSet;
+pub use capacities::{Capacities, CapacityError};
 pub use clock::{SimClock, Tick};
+pub use components::{Components, UnitState};
 pub use entity::EntityAllocator;
 pub use hash::SimHasher;
 pub use ids::{ArchetypeId, EntityHandle, EntityIndex, OptionalHandle, PlayerId, TechId};
 pub use rng::SimRng;
+pub use state::{SimState, Spawn};

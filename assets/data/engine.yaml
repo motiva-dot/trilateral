@@ -1,0 +1,34 @@
+# engine.yaml — simulation buffer capacities.
+#
+# These are ENGINE LIMITS, not balance. Changing one is a performance and
+# memory decision, not a design decision, which is why they live here rather
+# than in units.yaml or tech_tree.yaml.
+#
+# CLAUDE.md §1.4: every simulation buffer is pre-sized at match start from the
+# maxima declared here, and never grows afterwards. ADR-005 records why these
+# are runtime values rather than Rust constants — a `const MAX_ENTITIES` would
+# be a hardcoded number in Rust, which §1.8 forbids, and would need a recompile
+# to change prototype scale.
+#
+# Prototype targets from PRD §4: 1,200 entities on screen, 128x128 tile maps.
+# Ship targets: 4,000 entities, 256x256. max_entities is set above the
+# prototype target so that a match can run past its intended scale rather than
+# start dropping spawns.
+
+max_entities: 2048
+max_projectiles: 4096
+
+# Per player, per tick. This is the anti-flood bound at the command ingest
+# boundary — which is also the anti-cheat boundary for networked play
+# (CLAUDE.md §4). A peer exceeding it is misbehaving, not unlucky.
+max_commands_per_tick: 256
+
+# 1v1 plus observers and a neutral slot. PRD §8 puts >2 players out of scope
+# for the prototype; the array is cheap, so the limit is not the constraint.
+max_players: 8
+
+# Fixed-capacity per-entity command ring (CLAUDE.md §3.1).
+cmd_queue_slots: 16
+
+# Fixed-capacity per-entity modifier stack (CLAUDE.md §5.5).
+modifier_slots: 8
