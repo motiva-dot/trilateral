@@ -74,6 +74,16 @@ kira enter the outer crates, so they can never be pulled down into sim code.
   from this Windows dev machine fails with `bad interpreter: /usr/bin/env
   bash^M` — a confusing red that looks like a script bug.
 
+- **The executable bit does not survive Windows → git → Linux runner.**
+  `bootstrap_repo.sh` runs `chmod +x scripts/*.sh`, but Git for Windows has
+  `core.filemode` off, so both scripts were committed `100644` and the first
+  CI run failed with `./scripts/ban_floats.sh: Permission denied` (exit 126) —
+  after fmt and clippy had already passed. Fixed two ways: `git update-index
+  --chmod=+x` to set the real mode, and CI now invokes `bash ./scripts/...`
+  so the exec bit is no longer load-bearing. **Any future script added from
+  this machine needs the `update-index` treatment**; `.gitattributes` cannot
+  express file modes, so there is no declarative guard for this one.
+
 - **`--locked` everywhere in CI means `Cargo.lock` must be committed** and
   must be regenerated + committed in the same commit as any dependency change,
   or every CI job fails before it starts.
