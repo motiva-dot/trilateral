@@ -1,0 +1,185 @@
+# units.yaml — unit archetypes. CLAUDE.md §1.8: no gameplay number lives in
+# Rust, so everything the simulation knows about a unit is here.
+#
+# =============================================================================
+# PLACEHOLDER VALUES, DERIVED FROM STARCRAFT: BROOD WAR
+# =============================================================================
+# These are starting values, not design. Brood War's numbers are used because
+# they are the most thoroughly play-tested set in the genre and give an honest
+# baseline for the P1 exit test ("a Brood War player says it feels sharp") —
+# if the feel is wrong with known-good numbers, the problem is the ENGINE, not
+# the balance, which is exactly what we want to learn first.
+#
+# They are a scaffold to be tuned away from, not a target. PRD §1 is explicit
+# that the pitch is not "SC2 with new factions", and GAME_DESIGN §2 makes the
+# races differ in macro mechanics first. Only stat baselines are borrowed here
+# — no names, no art, no identity.
+#
+# -----------------------------------------------------------------------------
+# UNIT CONVERSION TABLE (BW "Fastest" -> TRILATERAL)
+# -----------------------------------------------------------------------------
+# BW Fastest runs at ~23.81 frames/sec; we run a locked 30 ticks/sec. BW
+# distances are in pixels with 32 px per build tile. So:
+#
+#   ticks       = bw_seconds * 30
+#   ticks       = bw_frames  * (30 / 23.81)   = bw_frames * 1.26
+#   tiles/tick  = (bw_px_per_frame / 32) * (23.81 / 30)
+#               =  bw_px_per_frame * 0.02482
+#   tiles       =  bw_range (BW already quotes ranges in tiles)
+#
+# Worked example, the Mite: BW Zergling cooldown 8 frames -> 8 * 1.26 = 10.08
+# -> 10 ticks. Speed 5.49 px/frame -> 0.1362 tiles/tick.
+#
+# TIMING NOTE ON THE MITE: BW makes two Zerglings per larva for 50 minerals
+# over 28 seconds. Murmur has no larva pairing — one Brood Point buys one unit
+# (GAME_DESIGN §2.1) — so the per-unit halves are used: 25 Ore, 420 ticks.
+# Preserving per-unit economics matters more than preserving the ritual.
+#
+# UNVERIFIED: Drone, Zergling and Hydralisk stats were checked against
+# published sources. The rest (Overlord, movement speeds, sight ranges) are
+# from recall and should be treated as approximate.
+#
+# NOT FROM BW, invented because BW has no equivalent concept and this engine
+# needs one: collider_radius, mass, turn_rate, attack arc, and the
+# frontswing/backswing split of the three-phase attack FSM (TECH_SPEC §5.3).
+# These are the numbers most likely to be wrong and most in need of play.
+# =============================================================================
+
+murmur:
+  # ---- Worker. BW Drone: 40 HP, 5 dmg, cd 22, 20s, 50 min, 1 supply. -------
+  - id: mur_drone
+    role: worker
+    shape: circle
+    cost: { ore: 50, flux: 0, ticks: 600 }
+    supply_x2: 2
+    hp: 40
+    armor: 0
+    collider_radius: 0.34
+    mass: 2
+    move_speed: 0.1362
+    turn_rate: 0.10
+    sight_range: 7.0
+    selection_weight: 10
+    attack:
+      damage: 5
+      range: 1.0
+      cooldown_ticks: 28
+      frontswing_ticks: 2
+      backswing_ticks: 4
+      arc: 0.25
+    tags: [worker, ground, biological]
+
+  # ---- Cheap melee. BW Zergling: 35 HP, 5 dmg, cd 8, 0.5 supply. -----------
+  # supply_x2: 1 is the fractional-supply fix from audit item 29.
+  - id: mur_mite
+    role: melee
+    shape: circle
+    cost: { ore: 25, flux: 0, ticks: 420 }
+    supply_x2: 1
+    hp: 35
+    armor: 0
+    collider_radius: 0.30
+    mass: 1
+    move_speed: 0.1362
+    turn_rate: 0.14
+    sight_range: 5.0
+    selection_weight: 20
+    attack:
+      damage: 5
+      range: 1.0
+      cooldown_ticks: 10
+      frontswing_ticks: 1
+      backswing_ticks: 2
+      arc: 0.30
+    tags: [ground, biological, light]
+
+  # ---- Ranged core. BW Hydralisk: 80 HP, 10 dmg, cd 15, range 4. -----------
+  - id: mur_lasher
+    role: ranged
+    shape: circle
+    cost: { ore: 75, flux: 25, ticks: 840 }
+    supply_x2: 2
+    hp: 80
+    armor: 0
+    collider_radius: 0.38
+    mass: 3
+    move_speed: 0.0908
+    turn_rate: 0.09
+    sight_range: 6.0
+    selection_weight: 30
+    attack:
+      damage: 10
+      range: 4.0
+      cooldown_ticks: 19
+      frontswing_ticks: 3
+      backswing_ticks: 5
+      arc: 0.20
+    tags: [ground, biological]
+
+  # ---- Mobile supply. BW Overlord: 200 HP, 100 min, 40s, +8 supply. --------
+  # GAME_DESIGN §1.3: Murmur supply is mobile. Provides 16 supply_x2 = 8
+  # displayed, matching BW.
+  - id: mur_supply_sac
+    role: supply
+    shape: circle
+    cost: { ore: 100, flux: 0, ticks: 1200 }
+    supply_x2: 0
+    provides_supply_x2: 16
+    hp: 200
+    armor: 0
+    collider_radius: 0.55
+    mass: 8
+    move_speed: 0.0206
+    turn_rate: 0.04
+    sight_range: 9.0
+    selection_weight: 5
+    tags: [ground, biological, supply]
+
+# =============================================================================
+# NEUTRAL — owned by PlayerId::NEUTRAL. Takes no orders, but is a legal target
+# for Harvest (see sim_core::command::validate).
+# =============================================================================
+neutral:
+  # BW mineral patch: 1500 minerals. GAME_DESIGN §1.1 wants 6-9 per base.
+  - id: ore_node
+    role: resource
+    shape: circle
+    cost: { ore: 0, flux: 0, ticks: 0 }
+    supply_x2: 0
+    hp: 1
+    armor: 0
+    collider_radius: 0.75
+    mass: 255
+    move_speed: 0.0
+    turn_rate: 0.0
+    sight_range: 0.0
+    selection_weight: 1
+    resource:
+      kind: ore
+      amount: 1500
+      harvest_slots: 2
+      per_trip: 8
+      trip_ticks: 60
+    tags: [neutral, resource, static]
+
+  # BW vespene geyser: 5000 gas. GAME_DESIGN §1.2 sets Flux fissures at 2500.
+  - id: flux_fissure
+    role: resource
+    shape: circle
+    cost: { ore: 0, flux: 0, ticks: 0 }
+    supply_x2: 0
+    hp: 1
+    armor: 0
+    collider_radius: 0.9
+    mass: 255
+    move_speed: 0.0
+    turn_rate: 0.0
+    sight_range: 0.0
+    selection_weight: 1
+    resource:
+      kind: flux
+      amount: 2500
+      harvest_slots: 3
+      per_trip: 4
+      trip_ticks: 75
+    tags: [neutral, resource, static]
