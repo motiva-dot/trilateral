@@ -59,6 +59,7 @@ fn registries() -> Registries {
             max_paths_per_tick: 32,
             ..SteeringParams::default()
         },
+        race: Default::default(),
     }
 }
 

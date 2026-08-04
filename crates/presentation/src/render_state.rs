@@ -232,6 +232,7 @@ mod tests {
                 tags: vec![],
             }]),
             steering: sim_core::SteeringParams::default(),
+            race: Default::default(),
         }
     }
 

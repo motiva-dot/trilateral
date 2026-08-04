@@ -1,0 +1,22 @@
+# races.yaml — race macro mechanics. GAME_DESIGN §2.
+#
+# Design law from §2: races differ in their MACRO MECHANICS first and their
+# unit stats second. This file is where that difference actually lives, and it
+# is deliberately separate from units.yaml — changing a number here changes how
+# a race is played, not how one of its units performs.
+
+murmur:
+  # THE BROOD POOL (GAME_DESIGN §2.1). Every base generates Brood Points into
+  # one shared pool; any unit is spawned by spending points plus resources at
+  # any base. One production currency instead of parallel buildings.
+  #
+  # Murmur macro skill is therefore: never float points, and choose what the
+  # swarm becomes at the moment of spending. The larva tension, generalised.
+
+  # Ticks per Brood Point, per base. 90 = 3 seconds at 30Hz.
+  brood_point_period_ticks: 90
+
+  # Stockpile cap per base. GAME_DESIGN §7 flags this as untested and it is
+  # the number that decides whether floating points is a mistake you can feel:
+  # too high and there is no pressure, too low and the pool is a leaky bucket.
+  brood_stockpile_cap_per_base: 3

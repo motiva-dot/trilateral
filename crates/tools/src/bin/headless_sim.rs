@@ -23,7 +23,7 @@
 
 use std::fmt::Write as _;
 
-use sim_content::{capacities_from_yaml, steering_from_yaml, units_from_yaml};
+use sim_content::{capacities_from_yaml, races_from_yaml, steering_from_yaml, units_from_yaml};
 use sim_core::{Command, IssuedCommand, PlayerId, Registries, SimState, Spawn, Tick};
 use sim_systems::{SimContext, tick};
 use trilateral_fixed::{Fixed, FixedAngle, FixedVec2};
@@ -33,6 +33,7 @@ use trilateral_fixed::{Fixed, FixedAngle, FixedVec2};
 const ENGINE_YAML: &str = include_str!("../../../../assets/data/engine.yaml");
 const UNITS_YAML: &str = include_str!("../../../../assets/data/units.yaml");
 const STEERING_YAML: &str = include_str!("../../../../assets/data/steering.yaml");
+const RACES_YAML: &str = include_str!("../../../../assets/data/races.yaml");
 /// Map extent for the spatial hash. PRD §4 puts prototype maps at 128x128.
 const WORLD_TILES: i32 = 128;
 
@@ -55,6 +56,7 @@ fn main() {
         units: units_from_yaml(UNITS_YAML).expect("assets/data/units.yaml must be valid"),
         steering: steering_from_yaml(STEERING_YAML)
             .expect("assets/data/steering.yaml must be valid"),
+        race: races_from_yaml(RACES_YAML).expect("assets/data/races.yaml must be valid"),
     };
     let mut state = SimState::new(caps, seed, WORLD_TILES as u16);
     let mut ctx = SimContext::new(

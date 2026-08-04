@@ -185,6 +185,7 @@ impl UnitRegistry {
 pub struct Registries {
     pub units: UnitRegistry,
     pub steering: SteeringParams,
+    pub race: crate::race::RaceParams,
 }
 
 #[cfg(test)]

@@ -19,16 +19,17 @@
 
 use std::time::Instant;
 
-use sim_content::{capacities_from_yaml, steering_from_yaml, units_from_yaml};
+use sim_content::{capacities_from_yaml, races_from_yaml, steering_from_yaml, units_from_yaml};
 use sim_core::{
     ArchetypeId, Command, IssuedCommand, PlayerId, Registries, SimState, Spawn, Tick, Tile,
 };
-use sim_systems::{SimContext, movement, pathing, steering, tick};
+use sim_systems::{SimContext, economy, movement, pathing, production, steering, tick};
 use trilateral_fixed::{Fixed, FixedVec2};
 
 const ENGINE_YAML: &str = include_str!("../../../../assets/data/engine.yaml");
 const UNITS_YAML: &str = include_str!("../../../../assets/data/units.yaml");
 const STEERING_YAML: &str = include_str!("../../../../assets/data/steering.yaml");
+const RACES_YAML: &str = include_str!("../../../../assets/data/races.yaml");
 
 /// PRD §4: the prototype target is 1,200 entities at 30Hz.
 const ENTITIES: i32 = 1_200;
@@ -56,7 +57,7 @@ const BUDGETS: &[Budget] = &[
         ms: 0.8,
     },
     Budget {
-        name: "command_execution",
+        name: "commands+economy+production",
         ms: 0.4,
     },
 ];
@@ -89,6 +90,8 @@ fn main() {
     for _ in 0..MEASURE {
         let a = Instant::now();
         movement::command_execution(&mut state, &reg);
+        production::production(&mut state, &reg);
+        economy::economy(&mut state, &reg, &mut ctx);
         let b = Instant::now();
         pathing::pathfinding(&mut state, &reg, &mut ctx);
         let c = Instant::now();
@@ -110,7 +113,10 @@ fn main() {
         ("steering", t.steering / n * 1000.0),
         ("pathfinding", t.pathfinding / n * 1000.0),
         ("movement+spatial", t.movement_spatial / n * 1000.0),
-        ("command_execution", t.command_execution / n * 1000.0),
+        (
+            "commands+economy+production",
+            t.command_execution / n * 1000.0,
+        ),
     ];
     let total: f64 = measured.iter().map(|(_, ms)| ms).sum();
 
@@ -157,6 +163,7 @@ fn build() -> (SimState, Registries, SimContext) {
     let reg = Registries {
         units: units_from_yaml(UNITS_YAML).expect("units.yaml"),
         steering: steering_from_yaml(STEERING_YAML).expect("steering.yaml"),
+        race: races_from_yaml(RACES_YAML).expect("races.yaml"),
     };
     let mut state = SimState::new(caps, 42, WORLD);
 
@@ -236,6 +243,8 @@ fn verify_pipeline_matches() -> bool {
         tick(&mut a, &reg_a, &mut ctx_a);
 
         movement::command_execution(&mut b, &reg_b);
+        production::production(&mut b, &reg_b);
+        economy::economy(&mut b, &reg_b, &mut ctx_b);
         pathing::pathfinding(&mut b, &reg_b, &mut ctx_b);
         steering::steering(&b, &reg_b, &mut ctx_b);
         movement::movement(&mut b, &reg_b, &ctx_b);

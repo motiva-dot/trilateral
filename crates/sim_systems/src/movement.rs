@@ -25,7 +25,7 @@ use trilateral_fixed::{Fixed, FixedVec2};
 /// Iterates the log in append order and applies only entries stamped for the
 /// current tick — §5.1 schedules commands at `issue_tick + input_delay` so
 /// every client executes them on the same tick.
-pub fn command_execution(state: &mut SimState, _reg: &Registries) {
+pub fn command_execution(state: &mut SimState, reg: &Registries) {
     let now = state.clock.tick;
     // Collect first: the log is borrowed immutably while we mutate components.
     // Bounded by max_commands_per_tick per player, so this is small; it will
@@ -51,6 +51,15 @@ pub fn command_execution(state: &mut SimState, _reg: &Registries) {
                 // hands out a new one next tick.
                 state.c.path[i].clear();
                 state.c.stuck_ticks[i] = 0;
+            }
+            Command::Train { unit } => {
+                train(state, reg, subject, unit);
+            }
+            Command::SetRally { pos } => {
+                state.c.rally[i] = pos;
+            }
+            Command::Cancel { queue_slot } => {
+                cancel(state, reg, subject, queue_slot);
             }
             Command::Harvest { node } => {
                 // Validated at ingest (the node was alive then), but that was
@@ -82,6 +91,68 @@ pub fn command_execution(state: &mut SimState, _reg: &Registries) {
             // that half-works is worse than one that visibly does nothing.
             _ => {}
         }
+    }
+}
+
+/// Put a unit into a building.s production queue, paying for it up front.
+///
+/// Everything is checked here rather than at ingest, because affordability is
+/// a property of the tick the command EXECUTES on, not of the tick it was
+/// issued on. With input delay, a player can issue two orders they can only
+/// afford one of; the second must fail then, not now.
+fn train(
+    state: &mut SimState,
+    reg: &Registries,
+    building: sim_core::EntityHandle,
+    unit: sim_core::ArchetypeId,
+) {
+    let n = building.index as usize;
+    let is_producer = reg
+        .units
+        .by_archetype(state.c.archetype[n])
+        .map(|u| u.role == sim_core::registry::Role::Base)
+        .unwrap_or(false);
+    if !is_producer || state.c.production[n].is_full() {
+        return;
+    }
+    let Some(cost) = crate::production::train_cost(reg, unit) else {
+        return;
+    };
+    let owner = state.c.owner[n].0 as usize;
+    let Some(player) = state.players.get_mut(owner) else {
+        return;
+    };
+    if player.brood_points < cost.brood
+        || !player.has_supply_for(cost.supply_x2)
+        || !player.can_afford(cost.ore, cost.flux)
+    {
+        return;
+    }
+    // Only now does anything change. Checking everything before spending
+    // anything is what makes a refused order leave no trace.
+    player.brood_points -= cost.brood;
+    let spent = player.try_spend(cost.ore, cost.flux);
+    debug_assert!(spent, "affordability was checked immediately above");
+    state.c.production[n].push(unit, cost.ticks);
+}
+
+/// Cancel a queued item and refund it in full.
+///
+/// Full refund because the cost was taken at enqueue: a partial refund would
+/// be a cancellation FEE, which is a design decision nobody has made.
+fn cancel(state: &mut SimState, reg: &Registries, building: sim_core::EntityHandle, slot: u8) {
+    let n = building.index as usize;
+    let Some(removed) = state.c.production[n].remove(slot as usize) else {
+        return;
+    };
+    let Some(cost) = crate::production::train_cost(reg, removed.archetype) else {
+        return;
+    };
+    let owner = state.c.owner[n].0 as usize;
+    if let Some(player) = state.players.get_mut(owner) {
+        player.ore += cost.ore;
+        player.flux += cost.flux;
+        player.brood_points = player.brood_points.saturating_add(cost.brood);
     }
 }
 
@@ -250,6 +321,7 @@ mod tests {
                 tags: vec![],
             }]),
             steering: sim_core::SteeringParams::default(),
+            race: Default::default(),
         }
     }
 

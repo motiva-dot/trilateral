@@ -372,6 +372,7 @@ mod tests {
         Registries {
             units: UnitRegistry::new(vec![unit("light", 50, 1), unit("heavy", 50, 20)]),
             steering: sim_core::SteeringParams::default(),
+            race: Default::default(),
         }
     }
 
