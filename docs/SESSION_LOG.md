@@ -1,5 +1,30 @@
 # SESSION_LOG.md
 
+## PLAY SESSION — 2026-08-04 (second). Collision.
+Architect ran the debug view after Phase 4 landed. Verdict: **"the collision
+seemed ok."**
+
+That is the first confirmation that separation, mass priority and the settle
+rule behave acceptably to a human rather than only to a test. Taken as a pass.
+
+**What it does NOT yet tell us**, recorded so the next session does not mistake
+this for a completed Feel Checkpoint 1. "Seemed ok" is the absence of a
+reported problem, which is weaker than a verified good. The specific things
+the obstacle map was built to expose, still unjudged:
+- whether a group ordered through the two-tile CORRIDOR files through it or
+  jams at the mouth — the case where the settle rule is most visible, and
+  where a wrong `settle_stuck_ticks` shows up as units giving up too early;
+- whether crossing the PILLAR FIELD produces oscillation, since constant small
+  course corrections are where naive steering wobbles;
+- whether `separation_response: 0.45` reads as billiard balls, as mush, or as
+  about right — the one number most likely to be wrong;
+- whether heavier units visibly shove lighter ones, which is only testable
+  once mixed archetypes are on screen together.
+
+None of these are blockers. They are the agenda for a real Feel Checkpoint 1,
+which is best run after the bench settles ADR-012, since HPA* would change the
+movement characteristics being judged.
+
 ## Session 2026-08-04 — Phases 2, 3, 3.5 and the Phase 4 gate
 Phases: 2 → complete, 3 → complete, 3.5 → complete, 4 → gate met with two
 items open (ADR-012). Tests: **304**, green in debug and release, on three
