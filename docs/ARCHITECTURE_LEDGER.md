@@ -107,6 +107,48 @@ either rule is a determinism break needing its own ADR. Both rules are stated
 in the `fixed.rs` module header and pinned by tests so that the next person to
 notice the asymmetry finds the reason before the edit button.
 
+### ADR-005 — Component arrays are runtime-sized `Box<[T]>`, not const arrays
+**Date:** 2026-08-04 · **Resolves:** Open Spec Conflict #1 · **Approved by the
+human architect.**
+**Decision:** `Components` holds `Box<[T]>` of length `max_entities`, read from
+`assets/data/engine.yaml` and allocated once at match start. CLAUDE.md §3.1 has
+been amended accordingly — it previously showed `[T; MAX_ENTITIES]`.
+**Context:** CLAUDE.md §3.1 and TECH_SPEC §3 disagreed. Const arrays make
+`max_entities` a hardcoded gameplay number in Rust, which §1.8 forbids
+outright, and they force a recompile to change prototype scale.
+**Alternatives:** (a) const generics `Components<const N: usize>` — pushes N
+into every signature in `sim_systems` and still bakes the value in at compile
+time; (b) keep const arrays and exempt `max_entities` from §1.8 — rejected,
+because the exemption is the thin end of exactly the wedge §1.8 exists to stop.
+**Consequences:** §1.4 (no steady-state allocation) is unaffected: allocation
+happens at match setup, never per tick, and the allocation gate measures ticks
+1,000–2,000. Boxed slices are `Copy`-element and contiguous, so `snapshot()` is
+still a flat copy and `hash()` still folds contiguous memory in declared order —
+the two properties the SoA design exists to provide. Cost is one pointer
+indirection per component array per system, which is amortised across a whole
+array traversal.
+**Note for Phase 2:** arrays must be *pre-touched* after allocation (write
+zeroes across them) so first-touch page faults do not land inside tick 1,000.
+
+### ADR-006 — `SimHasher` is our own fold, not xxh3 or rapidhash
+**Date:** 2026-08-04
+**Decision:** The state hasher is a small vendored 64-bit fold built from a
+multiply-xorshift finaliser, named `SimHasher`. CLAUDE.md §3.1 previously named
+"rapidhash or xxh3 with fixed seed, vendored"; that naming is withdrawn.
+**Context:** §1.3 permits sim crates only `trilateral_fixed`, `serde` and
+`smallvec`, so any hasher must be hand-written inside `sim_core`. Vendoring
+xxh3 correctly is a substantial job, and a *subtly incorrect* xxh3 is worse
+than an honest custom hash: it would carry a name implying interoperability and
+external test vectors it does not actually satisfy.
+**Alternatives:** (a) vendor xxh3 — rejected on correctness risk versus zero
+benefit, since nothing outside this repo ever consumes these hashes;
+(b) vendor xxHash64, which is simpler — still claims compatibility we would
+have to verify against official vectors to be entitled to claim.
+**Consequences:** We need determinism and avalanche, not interoperability. Our
+own golden vectors are pinned in `sim_core`'s tests. If an external tool ever
+needs to reproduce a state hash, that is the moment to revisit this — and it
+would be a determinism-breaking change invalidating stored replays.
+
 ## Gotchas & Lessons
 
 - **`ban_floats.sh` needed a second fix at Phase 1, as predicted.** Per-line

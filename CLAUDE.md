@@ -130,29 +130,39 @@ pub struct SimState {
 }
 
 pub struct Components {
-    // Parallel arrays indexed by EntityIndex. Fixed capacity MAX_ENTITIES.
-    pub alive:        BitArray<MAX_ENTITIES>,
-    pub archetype:    [ArchetypeId; MAX_ENTITIES],   // index into UnitRegistry
-    pub owner:        [PlayerId; MAX_ENTITIES],
-    pub pos:          [FixedVec2; MAX_ENTITIES],
-    pub facing:       [FixedAngle; MAX_ENTITIES],
-    pub vel:          [FixedVec2; MAX_ENTITIES],
-    pub hp:           [i32; MAX_ENTITIES],
-    pub shields:      [i32; MAX_ENTITIES],           // Concord race mechanic
-    pub incoming_dmg: [i32; MAX_ENTITIES],
-    pub state:        [UnitState; MAX_ENTITIES],
-    pub attack:       [AttackState; MAX_ENTITIES],
-    pub target:       [OptionalHandle; MAX_ENTITIES],
-    pub cmd_queue:    [CmdQueue; MAX_ENTITIES],      // fixed-cap ring, 16 slots
-    pub modifiers:    [ModifierStack; MAX_ENTITIES], // fixed-cap, 8 slots
-    pub cargo:        [Cargo; MAX_ENTITIES],
-    pub production:   [ProductionQueue; MAX_ENTITIES],
-    pub cooldowns:    [AbilityCooldowns; MAX_ENTITIES],
+    // Parallel arrays indexed by EntityIndex. Every array has EXACTLY
+    // `capacities.max_entities` elements, allocated once at match start from
+    // assets/data/engine.yaml and never resized. See ADR-005.
+    pub alive:        BitSet,                  // len = max_entities bits
+    pub archetype:    Box<[ArchetypeId]>,      // index into UnitRegistry
+    pub owner:        Box<[PlayerId]>,
+    pub pos:          Box<[FixedVec2]>,
+    pub facing:       Box<[FixedAngle]>,
+    pub vel:          Box<[FixedVec2]>,
+    pub hp:           Box<[i32]>,
+    pub shields:      Box<[i32]>,              // Concord race mechanic
+    pub incoming_dmg: Box<[i32]>,
+    pub state:        Box<[UnitState]>,
+    pub attack:       Box<[AttackState]>,
+    pub target:       Box<[OptionalHandle]>,
+    pub cmd_queue:    Box<[CmdQueue]>,         // fixed-cap ring, 16 slots
+    pub modifiers:    Box<[ModifierStack]>,    // fixed-cap, 8 slots
+    pub cargo:        Box<[Cargo]>,
+    pub production:   Box<[ProductionQueue]>,
+    pub cooldowns:    Box<[AbilityCooldowns]>,
 }
 ```
-- Every field is `Copy` or fixed-capacity. `SimState::snapshot()` is a
-  straight copy; `SimState::hash()` folds the arrays in declared order with a
-  stable 64-bit hasher (rapidhash or xxh3 with fixed seed, vendored).
+- **Capacity is runtime, not compile-time (ADR-005, 2026-08-04).** Earlier
+  drafts of this file wrote `[T; MAX_ENTITIES]`, which contradicted
+  TECH_SPEC §3 and violated §1.8 (no gameplay number hardcoded in Rust).
+  `Box<[T]>` is allocated once at match start and never grows, so §1.4 (no
+  steady-state allocation) is satisfied exactly as before: the allocation
+  happens at setup, not per tick, and the allocation gate measures ticks
+  1,000–2,000.
+- Every element type is `Copy` and fixed-size. `SimState::snapshot()` copies
+  the boxed slices; `SimState::hash()` folds the arrays in declared order with
+  a stable, fixed-seed, vendored 64-bit hasher (`SimHasher` — see ADR-006 for
+  why not xxh3).
 - Systems are plain functions: `fn movement_system(s: &mut SimState)`.
 
 ### 3.2 System Execution Order (Immutable, Explicitly Coded)
