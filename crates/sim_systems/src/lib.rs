@@ -28,6 +28,7 @@ pub mod movement;
 pub mod occupancy;
 pub mod path;
 pub mod pathing;
+pub mod production;
 pub mod spatial;
 pub mod steering;
 
@@ -117,7 +118,8 @@ pub fn tick(state: &mut SimState, reg: &Registries, ctx: &mut SimContext) {
     //  7. damage_application  — Phase 5
     //  8. death_cleanup       — Phase 5
     //  9. modifier_pipeline   — Phase 7
-    // 10. production_tick     — Phase 6
+    // 10. production_tick — supply, Brood Pool, queues.
+    production::production(state, reg);
     // 11. economy_tick — the harvest loop.
     economy::economy(state, reg, ctx);
     // 12. pathfinding — hand routes to movers that need one.

@@ -13,7 +13,7 @@
 //! importantly that saturation *emerges from slot contention* rather than from
 //! a scripted curve, which is what makes it tunable by feel later.
 
-use sim_content::{steering_from_yaml, units_from_yaml};
+use sim_content::{races_from_yaml, steering_from_yaml, units_from_yaml};
 use sim_core::registry::Role;
 use sim_core::{
     ArchetypeId, Capacities, Command, EntityHandle, IssuedCommand, PlayerId, Registries, SimState,
@@ -24,6 +24,7 @@ use trilateral_fixed::{Fixed, FixedVec2};
 
 const UNITS_YAML: &str = include_str!("../../../assets/data/units.yaml");
 const STEERING_YAML: &str = include_str!("../../../assets/data/steering.yaml");
+const RACES_YAML: &str = include_str!("../../../assets/data/races.yaml");
 const MAP: u16 = 64;
 
 fn caps() -> Capacities {
@@ -43,6 +44,7 @@ fn registries() -> Registries {
     Registries {
         units: units_from_yaml(UNITS_YAML).expect("units.yaml"),
         steering: steering_from_yaml(STEERING_YAML).expect("steering.yaml"),
+        race: races_from_yaml(RACES_YAML).expect("races.yaml"),
     }
 }
 

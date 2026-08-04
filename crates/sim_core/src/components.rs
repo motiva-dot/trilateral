@@ -129,6 +129,129 @@ impl PathSlot {
     }
 }
 
+/// One unit under construction.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub struct ProductionSlot {
+    pub archetype: ArchetypeId,
+    pub ticks_left: u32,
+}
+
+/// A building's production queue. Fixed capacity, because §1.4 forbids
+/// per-entity heap allocation.
+///
+/// # Cost is paid at ENQUEUE, not at completion
+/// The alternative — reserve now, pay later — means a player can queue five
+/// units they cannot afford and discover the truth minutes later. Paying up
+/// front makes the bank the honest statement of what you have committed, and
+/// makes a cancel a refund rather than a release.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct ProductionQueue {
+    slots: [ProductionSlot; ProductionQueue::CAPACITY],
+    len: u8,
+}
+
+impl Default for ProductionQueue {
+    fn default() -> Self {
+        ProductionQueue::EMPTY
+    }
+}
+
+impl ProductionQueue {
+    pub const CAPACITY: usize = 8;
+    pub const EMPTY: ProductionQueue = ProductionQueue {
+        slots: [ProductionSlot {
+            archetype: ArchetypeId::NONE,
+            ticks_left: 0,
+        }; Self::CAPACITY],
+        len: 0,
+    };
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.len as usize
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[inline]
+    pub fn is_full(&self) -> bool {
+        self.len as usize >= Self::CAPACITY
+    }
+
+    /// Returns false if the queue is full — the caller must not have spent.
+    pub fn push(&mut self, archetype: ArchetypeId, ticks: u32) -> bool {
+        if self.is_full() {
+            return false;
+        }
+        self.slots[self.len as usize] = ProductionSlot {
+            archetype,
+            ticks_left: ticks.max(1),
+        };
+        self.len += 1;
+        true
+    }
+
+    #[inline]
+    pub fn front(&self) -> Option<ProductionSlot> {
+        if self.len == 0 {
+            None
+        } else {
+            Some(self.slots[0])
+        }
+    }
+
+    /// Advance the front item by one tick. Only the front progresses: a
+    /// building works on one thing at a time, which is what makes queue order
+    /// a decision rather than a formality.
+    pub fn tick_front(&mut self) -> Option<ArchetypeId> {
+        if self.len == 0 {
+            return None;
+        }
+        if self.slots[0].ticks_left > 1 {
+            self.slots[0].ticks_left -= 1;
+            return None;
+        }
+        let done = self.slots[0].archetype;
+        self.remove(0);
+        Some(done)
+    }
+
+    /// Remove a slot, shuffling the rest forward and ZEROING the tail.
+    ///
+    /// The whole array is hashed, so leaving stale data past `len` would make
+    /// two identical queues hash differently.
+    pub fn remove(&mut self, index: usize) -> Option<ProductionSlot> {
+        if index >= self.len as usize {
+            return None;
+        }
+        let removed = self.slots[index];
+        for k in index..(self.len as usize - 1) {
+            self.slots[k] = self.slots[k + 1];
+        }
+        self.len -= 1;
+        self.slots[self.len as usize] = ProductionSlot {
+            archetype: ArchetypeId::NONE,
+            ticks_left: 0,
+        };
+        Some(removed)
+    }
+
+    pub fn clear(&mut self) {
+        *self = ProductionQueue::EMPTY;
+    }
+
+    pub fn hash_into(&self, h: &mut SimHasher) {
+        for s in &self.slots {
+            h.write_u32(s.archetype.0 as u32);
+            h.write_u32(s.ticks_left);
+        }
+        h.write_u8(self.len);
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Components {
     pub alive: BitSet,
@@ -162,6 +285,10 @@ pub struct Components {
     pub harvest_target: Box<[OptionalHandle]>,
     /// Ticks spent mining at the node this trip.
     pub harvest_ticks: Box<[u32]>,
+    /// A building.s production queue.
+    pub production: Box<[ProductionQueue]>,
+    /// Where newly produced units are sent. ZERO means "no rally set".
+    pub rally: Box<[FixedVec2]>,
 }
 
 impl Components {
@@ -188,6 +315,8 @@ impl Components {
             cargo: vec![0u32; n].into_boxed_slice(),
             harvest_target: vec![OptionalHandle::NONE; n].into_boxed_slice(),
             harvest_ticks: vec![0u32; n].into_boxed_slice(),
+            production: vec![ProductionQueue::EMPTY; n].into_boxed_slice(),
+            rally: vec![FixedVec2::ZERO; n].into_boxed_slice(),
         }
     }
 
@@ -220,6 +349,8 @@ impl Components {
         self.cargo[n] = 0;
         self.harvest_target[n] = OptionalHandle::NONE;
         self.harvest_ticks[n] = 0;
+        self.production[n].clear();
+        self.rally[n] = FixedVec2::ZERO;
     }
 
     /// Fold every array, in declared order.
@@ -262,6 +393,10 @@ impl Components {
             h.write_u32(g);
         }
         h.write_u32_slice(&self.harvest_ticks);
+        for v in &self.production {
+            v.hash_into(h);
+        }
+        hash_vec2s(h, &self.rally);
     }
 }
 
@@ -296,6 +431,8 @@ pub fn slot_is_clear(c: &Components, i: EntityIndex) -> bool {
         && c.cargo[n] == 0
         && c.harvest_target[n] == OptionalHandle::NONE
         && c.harvest_ticks[n] == 0
+        && c.production[n] == ProductionQueue::EMPTY
+        && c.rally[n] == FixedVec2::ZERO
 }
 
 #[cfg(test)]

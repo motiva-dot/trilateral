@@ -175,6 +175,7 @@ mod tests {
                 max_paths_per_tick: budget,
                 ..SteeringParams::default()
             },
+            race: Default::default(),
         }
     }
 
