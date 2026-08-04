@@ -149,7 +149,66 @@ own golden vectors are pinned in `sim_core`'s tests. If an external tool ever
 needs to reproduce a state hash, that is the moment to revisit this — and it
 would be a determinism-breaking change invalidating stored replays.
 
+### ADR-007 — YAML parser is `serde-saphyr`
+**Date:** 2026-08-04 · Dependency of `sim_content` only, never a sim crate.
+**Decision:** `serde-saphyr` 1.0.0, `default-features = false`,
+`features = ["deserialize"]`.
+**Context (checked on crates.io, not recalled — law 10):**
+
+| crate | version | last updated | notes |
+|---|---|---|---|
+| `serde_yaml` | 0.9.34+deprecated | — | dtolnay deprecated it |
+| `serde_yml` | 0.0.13 | — | **now itself deprecated**: "unmaintained… thin compatibility shim" |
+| `libyml` | 0.0.6 | — | likewise deprecated |
+| `serde_norway` | 0.9.42 | **Dec 2024** | ~20 months stale; depends on `unsafe-libyaml-norway` |
+| `yaml_serde` | 0.10.4 | Mar 2026 | official YAML Organization fork |
+| `serde-saphyr` | **1.0.0** | **Jul 2026** | pure Rust, panic-free by design, 3.7M downloads |
+
+**Decision drivers, in order:**
+1. **Panic-freedom.** MARKET_POSITION #4 makes balance community-forkable, so
+   this parser will be fed files written by strangers. A panic in the loader is
+   a crash on someone else's mod. `serde-saphyr` makes this an explicit design
+   goal; verified here with malformed, truncated, control-character and
+   self-referential-alias inputs — all return errors.
+2. **No `unsafe`.** `serde_norway` inherits `unsafe-libyaml-norway`, a
+   transpiled-C parser. `sim_core` and `sim_content` are both
+   `#![forbid(unsafe_code)]`; a pure-Rust parser keeps that meaningful.
+3. **Maintenance.** Updated days before adoption, versus 20 months stale.
+4. **Stability.** 1.0.0, so semver actually means something.
+
+**Consequences:** 12 transitive packages; `cargo deny` passes on all of them.
+No `Value` type — deserialisation is strongly typed only. That is a *feature*
+here: it pairs with `#[serde(deny_unknown_fields)]` so a typo in a community
+balance file is reported rather than silently ignored. Dynamic/untyped YAML
+handling is not available, which matters only if hot-reload ever needs to diff
+arbitrary documents.
+**Not yet done:** `Options` exposes parser limits. Before shipping community
+content, set alias-expansion and depth limits (YAML "billion laughs").
+
 ## Gotchas & Lessons
+
+- **Cargo feature unification defeats the `float_bridge` quarantine.**
+  TECH_SPEC §1 says `float_bridge` is confined to `sim_content`. It is not:
+  Cargo features are additive and unified across the graph, so once
+  `sim_content` enables it, the same `trilateral_fixed` rlib linked into
+  `sim_core` also has `from_f64`/`to_f64` compiled in. The quarantine is a
+  convention, not a compile-time wall. What actually enforces it is
+  `ban_floats.sh` — any call to `Fixed::from_f64` in a sim crate contains the
+  token `f64` and is rejected. Documented in `sim_content/src/lib.rs`.
+
+- **`tech_tree.yaml` shipped with two dangling `track.next` references.**
+  `bas_weapons_1` and `con_weapons_1` both pointed at a `_2` that was never
+  written — the murmur track was spelled out in full and the other two were
+  abbreviated. Found immediately by the loader's reference validation, on the
+  very first run against real content. Filled in by mirroring the murmur
+  escalation, marked PLACEHOLDER COSTS in the file, and **still needs a balance
+  pass** (OPERATIONS §5 keeps numbers human). Sibling of Open Spec Conflict #4.
+
+- **An empty content file must be an error, not an empty registry.** A
+  self-referential YAML alias (`&a *a`) parses to a null document and
+  deserialises to an empty map without panicking. Silently yielding a registry
+  with zero techs means "this race has no tech tree", which no legitimate file
+  means. Hence `ContentError::Empty`.
 
 - **`ban_floats.sh` needed a second fix at Phase 1, as predicted.** Per-line
   `// FLOAT_EXCEPTION:` markers do not work for a whole module: the script

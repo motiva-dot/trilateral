@@ -135,6 +135,22 @@ bastion:
     requires: [bas_machine_works]
     effects: [{ stat: attack_damage, add: 1, applies_to: race:bastion }]
     track: { next: bas_weapons_2 }
+  # PLACEHOLDER COSTS — mirrors the murmur escalation exactly. The v2 file
+  # stopped at _1 and left `track.next` dangling; the loader's reference check
+  # caught it. Needs a balance pass, per OPERATIONS §5 (numbers stay human).
+  - id: bas_weapons_2
+    tier: 2
+    kind: upgrade
+    cost: { ore: 150, flux: 150, ticks: 2850 }
+    requires: [bas_weapons_1]
+    effects: [{ stat: attack_damage, add: 1, applies_to: race:bastion }]
+    track: { next: bas_weapons_3 }
+  - id: bas_weapons_3
+    tier: 3
+    kind: upgrade
+    cost: { ore: 200, flux: 200, ticks: 3300 }
+    requires: [bas_weapons_2, bas_grand_forge]
+    effects: [{ stat: attack_damage, add: 1, applies_to: race:bastion }]
 
   - id: bas_t3_gate
     tier: 3
@@ -201,6 +217,20 @@ concord:
     requires: [con_resonance_court]
     effects: [{ stat: attack_damage, add: 1, applies_to: race:concord }]
     track: { next: con_weapons_2 }
+  # PLACEHOLDER COSTS — see the note on bas_weapons_2.
+  - id: con_weapons_2
+    tier: 2
+    kind: upgrade
+    cost: { ore: 150, flux: 150, ticks: 2850 }
+    requires: [con_weapons_1]
+    effects: [{ stat: attack_damage, add: 1, applies_to: race:concord }]
+    track: { next: con_weapons_3 }
+  - id: con_weapons_3
+    tier: 3
+    kind: upgrade
+    cost: { ore: 200, flux: 200, ticks: 3300 }
+    requires: [con_weapons_2, con_zenith_spire]
+    effects: [{ stat: attack_damage, add: 1, applies_to: race:concord }]
 
   - id: con_t3_gate
     tier: 3
