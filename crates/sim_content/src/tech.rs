@@ -342,6 +342,44 @@ mod tests {
     }
 
     #[test]
+    fn placeholder_weapon_ladders_are_flat_hundreds() {
+        // Bastion and Concord weapon tracks are PLACEHOLDER values pending a
+        // balance pass: a deliberately generic 100/200/300 in both resources.
+        // Pinned so they cannot drift unnoticed before that pass happens.
+        let reg = TechRegistry::from_yaml(REAL_TECH_TREE).unwrap();
+        for race in ["bas", "con"] {
+            for (level, expected) in [(1, 100), (2, 200), (3, 300)] {
+                let id = format!("{race}_weapons_{level}");
+                let t = reg.get(&id).unwrap_or_else(|| panic!("{id} missing"));
+                assert_eq!(t.cost.ore, expected, "{id} ore");
+                assert_eq!(t.cost.flux, expected, "{id} flux");
+            }
+        }
+    }
+
+    #[test]
+    fn every_track_chain_terminates() {
+        // A track cycle would make the upgrade path loop forever once the UI
+        // walks it. Reference validity is checked at load; this checks shape.
+        let reg = TechRegistry::from_yaml(REAL_TECH_TREE).unwrap();
+        for start in reg.iter() {
+            let mut seen = vec![start.id.as_str()];
+            let mut cur = start;
+            while let Some(track) = &cur.track {
+                let next = reg.get(&track.next).expect("validated at load");
+                assert!(
+                    !seen.contains(&next.id.as_str()),
+                    "track cycle reaching {} from {}",
+                    next.id,
+                    start.id
+                );
+                seen.push(next.id.as_str());
+                cur = next;
+            }
+        }
+    }
+
+    #[test]
     fn all_three_races_are_present() {
         let reg = TechRegistry::from_yaml(REAL_TECH_TREE).unwrap();
         for race in ["murmur", "bastion", "concord"] {
