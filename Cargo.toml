@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/trilateral_fixed",
+    "crates/sim_core",
+    "crates/sim_systems",
+    "crates/sim_content",
+    "crates/bot",
+    "crates/netcode",
+    "crates/replay",
+    "crates/presentation",
+    "crates/trilateral_app",
+    "crates/tools",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# `publish = false` is load-bearing, not cosmetic: deny.toml's
+# [licenses.private] ignore = true keys off it to exempt our own crates from
+# the license check. Removing it turns the CI cargo-deny job red.
+publish = false
+
+# NOTE (CLAUDE.md law 10): versions below are PLACEHOLDERS. Phase 0 task:
+# check crates.io for current releases, update, and commit Cargo.lock —
+# the lockfile is the version truth thereafter.
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+smallvec = { version = "1", features = ["serde"] }
+trilateral_fixed = { path = "crates/trilateral_fixed" }
+sim_core = { path = "crates/sim_core" }
+sim_systems = { path = "crates/sim_systems" }
+sim_content = { path = "crates/sim_content" }
+bot = { path = "crates/bot" }
+netcode = { path = "crates/netcode" }
+replay = { path = "crates/replay" }
+presentation = { path = "crates/presentation" }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+
+[profile.dev.package."*"]
+opt-level = 2

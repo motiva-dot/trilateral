@@ -1,0 +1,13 @@
+[package]
+name = "tools"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+sim_core = { workspace = true }
+sim_systems = { workspace = true }
+
+[[bin]]
+name = "headless_sim"
+path = "src/bin/headless_sim.rs"

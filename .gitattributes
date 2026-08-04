@@ -1,0 +1,12 @@
+# Shell scripts MUST check out with LF on every platform. The CI `lint` job
+# runs ./scripts/ban_floats.sh on ubuntu; a CRLF checkout from a Windows dev
+# machine makes it fail with "bad interpreter: /usr/bin/env bash^M".
+*.sh        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.rs        text eol=lf
+*.md        text eol=lf
+
+# Replays and desync traces are opaque binaries — never touch them.
+*.rpl       binary

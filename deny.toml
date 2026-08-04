@@ -1,0 +1,67 @@
+# deny.toml — cargo-deny configuration (CLAUDE.md §1.3, TECH_SPEC §9 job 4).
+#
+# WHY THIS FILE EXISTS: the CI `lint` job runs EmbarkStudios/cargo-deny-action.
+# Without a config, cargo-deny applies defaults that fail this workspace on
+# day one (our own crates carry no `license` field). More importantly, this is
+# the mechanism behind The Dependency Ban — ban_floats.sh cannot see a HashMap
+# that arrives inside a transitive dependency; the graph check can.
+
+[graph]
+all-features = true
+
+# ---------------------------------------------------------------------------
+# Advisories — RUSTSEC database.
+# ---------------------------------------------------------------------------
+[advisories]
+version = 2
+yanked = "deny"
+ignore = []
+
+# ---------------------------------------------------------------------------
+# Licenses. `private.ignore` exempts our own workspace crates (publish = false),
+# which is why Cargo.toml sets that.
+# ---------------------------------------------------------------------------
+[licenses]
+version = 2
+confidence-threshold = 0.93
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+]
+
+[licenses.private]
+ignore = true
+
+# ---------------------------------------------------------------------------
+# Bans — THE SIM-CRATE ALLOWLIST (CLAUDE.md §1.3, §6.4).
+#
+# `sim_core` and `sim_systems` may depend ONLY on trilateral_fixed, serde and
+# smallvec. cargo-deny expresses this negatively: name a crate we never want
+# reachable, and list the only wrappers permitted to pull it in.
+#
+# PHASE 0 STATE: the graph is serde + smallvec + trilateral_fixed and nothing
+# else, so there is nothing to deny yet. Populate `deny` as real dependencies
+# arrive in the OUTER crates (wgpu, winit, quinn, kira, ...) so that a future
+# session cannot quietly pull one of them down into sim code. Every addition
+# here needs a line in the Ledger's ADR log.
+# ---------------------------------------------------------------------------
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true   # path deps inside the workspace use `path = `
+deny = []
+
+# ---------------------------------------------------------------------------
+# Sources — crates.io only; no git deps, no alternate registries.
+# ---------------------------------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

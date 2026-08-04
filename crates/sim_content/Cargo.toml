@@ -1,0 +1,9 @@
+[package]
+name = "sim_content"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+sim_core = { workspace = true }
+serde = { workspace = true }

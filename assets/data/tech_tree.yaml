@@ -1,0 +1,222 @@
+# tech_tree.yaml — Tech Tree Templates v2 (all values are starting points)
+# Schema: id, race, tier, kind, cost{ore,flux,ticks}, requires[], effects[]
+# All effects are Modifier specs consumed by the modifier pipeline.
+# supply is supply_x2 everywhere. 30Hz: 30 ticks = 1 second.
+
+# ============================ MURMUR ============================
+murmur:
+  # ---- Tier 1 (Ore-only era) ----
+  - id: mur_bloom_vigor
+    tier: 1
+    kind: upgrade
+    cost: { ore: 100, flux: 0, ticks: 1800 }
+    requires: [mur_nest]                 # base building
+    effects:
+      - { stat: move_speed, mult_on_bloom: 1.10, applies_to: race:murmur }
+  - id: mur_lasher_barbs                 # CHOICE PAIR with mur_mite_frenzy
+    tier: 1
+    kind: upgrade
+    cost: { ore: 150, flux: 0, ticks: 2100 }
+    requires: [mur_spine_hollow]
+    effects: [{ stat: attack_range, add: 1.0, applies_to: unit:mur_lasher }]
+  - id: mur_mite_frenzy
+    tier: 1
+    kind: upgrade
+    cost: { ore: 150, flux: 0, ticks: 2100 }
+    requires: [mur_spine_hollow]
+    effects: [{ stat: attack_cooldown_ticks, mult: 0.85, applies_to: unit:mur_mite }]
+
+  # ---- Tier 2 (Flux gate: build mur_deep_warren) ----
+  - id: mur_t2_gate
+    tier: 2
+    kind: mechanic
+    cost: { ore: 200, flux: 100, ticks: 2700 }
+    requires: [mur_nest]
+    unlocks_building: mur_deep_warren
+  - id: mur_pool_nexus
+    tier: 2
+    kind: mechanic
+    cost: { ore: 150, flux: 100, ticks: 2400 }
+    requires: [mur_deep_warren]
+    effects: [{ stat: brood_point_period_ticks, mult: 0.75, applies_to: player }]
+  - id: mur_burrow
+    tier: 2
+    kind: ability_unlock
+    cost: { ore: 100, flux: 100, ticks: 2400 }
+    requires: [mur_deep_warren]
+    grants_ability: { ability: burrow, to: [mur_mite, mur_creeper] }
+  - id: mur_weapons_1        # weapon/armor tracks, 3 levels, escalating flux
+    tier: 2
+    kind: upgrade
+    cost: { ore: 100, flux: 100, ticks: 2400 }
+    requires: [mur_deep_warren]
+    effects: [{ stat: attack_damage, add: 1, applies_to: race:murmur }]
+    track: { next: mur_weapons_2 }
+  - id: mur_weapons_2
+    tier: 2
+    kind: upgrade
+    cost: { ore: 150, flux: 150, ticks: 2850 }
+    requires: [mur_weapons_1]
+    effects: [{ stat: attack_damage, add: 1, applies_to: race:murmur }]
+    track: { next: mur_weapons_3 }
+  - id: mur_weapons_3
+    tier: 3
+    kind: upgrade
+    cost: { ore: 200, flux: 200, ticks: 3300 }
+    requires: [mur_weapons_2, mur_apex_chamber]
+    effects: [{ stat: attack_damage, add: 1, applies_to: race:murmur }]
+  # (mirror armor_1..3 track omitted for brevity — same shape)
+
+  # ---- Tier 3 (heavy Flux: build mur_apex_chamber) ----
+  - id: mur_t3_gate
+    tier: 3
+    kind: mechanic
+    cost: { ore: 300, flux: 250, ticks: 3600 }
+    requires: [mur_deep_warren]
+    unlocks_building: mur_apex_chamber
+  - id: mur_colossal_brood
+    tier: 3
+    kind: unit_unlock
+    cost: { ore: 200, flux: 200, ticks: 3000 }
+    requires: [mur_apex_chamber]
+    unlocks_unit: mur_breaker
+  - id: mur_bloom_recall
+    tier: 3
+    kind: ability_unlock
+    cost: { ore: 150, flux: 250, ticks: 3000 }
+    requires: [mur_apex_chamber]
+    grants_ability: { ability: bloom_recall, to: [mur_nest] }
+
+# ============================ BASTION ============================
+bastion:
+  - id: bas_stim_protocol            # CHOICE PAIR with bas_plated_infantry
+    tier: 1
+    kind: upgrade
+    cost: { ore: 150, flux: 0, ticks: 2100 }
+    requires: [bas_arsenal]
+    effects:
+      - { stat: move_speed, mult: 1.15, applies_to: tag:infantry }
+      - { stat: attack_cooldown_ticks, mult: 0.90, applies_to: tag:infantry }
+  - id: bas_plated_infantry
+    tier: 1
+    kind: upgrade
+    cost: { ore: 150, flux: 0, ticks: 2100 }
+    requires: [bas_arsenal]
+    effects: [{ stat: armor, add: 1, applies_to: tag:infantry }]
+  - id: bas_rapid_repair
+    tier: 1
+    kind: upgrade
+    cost: { ore: 100, flux: 0, ticks: 1800 }
+    requires: [bas_arsenal]
+    effects: [{ stat: repair_rate, mult: 1.5, applies_to: race:bastion }]
+
+  - id: bas_t2_gate
+    tier: 2
+    kind: mechanic
+    cost: { ore: 200, flux: 100, ticks: 2700 }
+    requires: [bas_hq]
+    unlocks_building: bas_machine_works
+  - id: bas_siege_protocols
+    tier: 2
+    kind: ability_unlock
+    cost: { ore: 150, flux: 150, ticks: 2400 }
+    requires: [bas_machine_works]
+    grants_ability: { ability: siege_deploy, to: [bas_howitzer] }
+  - id: bas_mine_fabrication
+    tier: 2
+    kind: unit_unlock
+    cost: { ore: 100, flux: 100, ticks: 2100 }
+    requires: [bas_machine_works]
+    unlocks_unit: bas_minelayer
+  - id: bas_weapons_1
+    tier: 2
+    kind: upgrade
+    cost: { ore: 100, flux: 100, ticks: 2400 }
+    requires: [bas_machine_works]
+    effects: [{ stat: attack_damage, add: 1, applies_to: race:bastion }]
+    track: { next: bas_weapons_2 }
+
+  - id: bas_t3_gate
+    tier: 3
+    kind: mechanic
+    cost: { ore: 300, flux: 250, ticks: 3600 }
+    requires: [bas_machine_works]
+    unlocks_building: bas_grand_forge
+  - id: bas_fortress_chassis
+    tier: 3
+    kind: unit_unlock
+    cost: { ore: 250, flux: 250, ticks: 3300 }
+    requires: [bas_grand_forge]
+    unlocks_unit: bas_crawler_fortress
+  - id: bas_orbital_survey
+    tier: 3
+    kind: ability_unlock
+    cost: { ore: 100, flux: 200, ticks: 2400 }
+    requires: [bas_grand_forge]
+    grants_ability: { ability: scan_reveal, to: [bas_hq] }
+
+# ============================ CONCORD ============================
+concord:
+  - id: con_focus_lenses             # CHOICE PAIR with con_swift_lattice
+    tier: 1
+    kind: upgrade
+    cost: { ore: 150, flux: 0, ticks: 2100 }
+    requires: [con_athenaeum]
+    effects: [{ stat: attack_range, add: 1.0, applies_to: unit:con_lancer }]
+  - id: con_swift_lattice
+    tier: 1
+    kind: upgrade
+    cost: { ore: 150, flux: 0, ticks: 2100 }
+    requires: [con_athenaeum]
+    effects: [{ stat: move_speed, mult: 1.12, applies_to: race:concord }]
+  - id: con_shield_harmonics
+    tier: 1
+    kind: upgrade
+    cost: { ore: 100, flux: 0, ticks: 1800 }
+    requires: [con_athenaeum]
+    effects: [{ stat: shield_regen_delay_ticks, mult: 0.75, applies_to: race:concord }]
+
+  - id: con_t2_gate
+    tier: 2
+    kind: mechanic
+    cost: { ore: 200, flux: 100, ticks: 2700 }
+    requires: [con_bastile]
+    unlocks_building: con_resonance_court
+  - id: con_warp_resonance          # THE race-defining tech
+    tier: 2
+    kind: mechanic
+    cost: { ore: 200, flux: 200, ticks: 3000 }
+    requires: [con_resonance_court]
+    effects: [{ stat: warp_in_enabled, set: true, applies_to: player }]
+  - id: con_blink_matrix
+    tier: 2
+    kind: ability_unlock
+    cost: { ore: 150, flux: 150, ticks: 2700 }
+    requires: [con_resonance_court]
+    grants_ability: { ability: blink, to: [con_skirmisher] }
+  - id: con_weapons_1
+    tier: 2
+    kind: upgrade
+    cost: { ore: 100, flux: 100, ticks: 2400 }
+    requires: [con_resonance_court]
+    effects: [{ stat: attack_damage, add: 1, applies_to: race:concord }]
+    track: { next: con_weapons_2 }
+
+  - id: con_t3_gate
+    tier: 3
+    kind: mechanic
+    cost: { ore: 300, flux: 300, ticks: 3600 }
+    requires: [con_resonance_court]
+    unlocks_building: con_zenith_spire
+  - id: con_arbiter_protocol
+    tier: 3
+    kind: unit_unlock
+    cost: { ore: 250, flux: 300, ticks: 3600 }
+    requires: [con_zenith_spire]
+    unlocks_unit: con_arbiter
+  - id: con_mass_recall
+    tier: 3
+    kind: ability_unlock
+    cost: { ore: 150, flux: 300, ticks: 3000 }
+    requires: [con_zenith_spire]
+    grants_ability: { ability: mass_recall, to: [con_arbiter] }

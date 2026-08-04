@@ -1,0 +1,101 @@
+# ai/murmur_standard.yaml — AI Decision Tree Template v2
+# One file per (race, style). Same schema for bastion_standard.yaml,
+# concord_standard.yaml, and aggressive/greedy variants.
+# The bot is an InputSource; it observes ONLY fog-legal state.
+
+meta:
+  race: murmur
+  style: standard          # standard | aggressive | greedy | turtle
+  decision_period_ticks: 8
+  apm_cap: 90              # per-difficulty override below
+  micro_level: 1           # 0 a-move | 1 stutter-step | 2 focus+retreat-hurt
+
+difficulty_overrides:
+  easy:   { apm_cap: 30, decision_period_ticks: 24, micro_level: 0 }
+  medium: { apm_cap: 60, decision_period_ticks: 12, micro_level: 1 }
+  hard:   { apm_cap: 140, decision_period_ticks: 6,  micro_level: 2 }
+  # No resource or vision cheating at ANY difficulty. Ever.
+
+# ---------------------------------------------------------------
+# OPENING BOOK — ordered; each step fires once when its `at` matches.
+# supply values are displayed supply (loader converts to supply_x2).
+# ---------------------------------------------------------------
+opening:
+  - at: { match_start: true }
+    do: { train: mur_drone, until_count: 12 }
+  - at: { supply_left: "<= 1" }
+    do: { train: mur_supply_sac }
+  - at: { workers: 10 }
+    do: { build: mur_spine_hollow }        # first production tech
+  - at: { workers: 12 }
+    do: { build: mur_extractor }            # first Flux
+  - at: { workers: 13 }
+    do: { scout_with: worker }
+  - at: { building_done: mur_spine_hollow }
+    do: { spend_brood: mur_mite, keep_training_workers: true }
+  - at: { ore_bank: ">= 350", minute: ">= 3.5" }
+    do: { expand: nearest_safe }
+  - at: { flux_bank: ">= 100" }
+    do: { research: mur_t2_gate }
+  - end_book: { minute: 6 }                 # then rules take over
+
+# ---------------------------------------------------------------
+# DECISION TREE — evaluated every decision_period; first match wins
+# within each priority band; bands evaluated top to bottom.
+# ---------------------------------------------------------------
+rules:
+  # BAND 0 — survival
+  - if: { under_attack_at: any_base }
+    do: { defend: attacked_base, with: all_army,
+          pull_workers: { if_army_supply_below: 10 } }
+  - if: { base_lost: true }
+    do: { posture: consolidate, rebuild: base_if_bank }
+
+  # BAND 1 — never float the race mechanic
+  - if: { brood_points: ">= stockpile_cap" }
+    do: { spend_brood: army_mix }
+  - if: { supply_left: "<= 2" }
+    do: { train: mur_supply_sac, count: 2 }
+  - if: { any_base_ore_saturated: false }
+    do: { train: mur_drone }
+
+  # BAND 2 — react to scouting (all observations fog-legal, timestamped)
+  - if: { enemy_seen: { race: bastion, walling: true } }
+    do: { tech_toward: mur_burrow, army_bias: ranged }
+  - if: { enemy_army_estimate: "> own_army * 1.3" }
+    do: { posture: turtle, build: mur_bloom_node, at: forward_choke }
+  - if: { enemy_expansions_seen: "> own_bases" }
+    do: { expand: nearest_safe }
+  - if: { scout_stale_ticks: "> 1800" }
+    do: { scout_with: cheapest_unit }
+
+  # BAND 3 — spend banks / advance tech
+  - if: { flux_bank: "> 400" }
+    do: { research: next_affordable, prefer: [mur_pool_nexus, mur_weapons_track] }
+  - if: { ore_bank: "> 800" }
+    do: { expand: nearest_safe }
+
+  # BAND 4 — win conditions
+  - if: { army_supply: ">= 55", upgrades_at_least: { weapons: 1 } }
+    do: { attack: enemy_main, route: bloom_covered_if_possible }
+  - if: { minute: "> 14", bases: ">= 3", army_supply: ">= 70" }
+    do: { attack: enemy_natural, then: enemy_main }
+
+  # BAND 5 — default macro heartbeat
+  - default:
+    do: { spend_brood: army_mix }
+
+army_mix:
+  standard: { mur_mite: 55%, mur_lasher: 35%, mur_creeper: 10% }
+  vs_bastion_wall: { mur_lasher: 55%, mur_creeper: 25%, mur_mite: 20% }
+
+# Available observation vocabulary (implemented by the bot's fog-legal
+# observation layer; conditions may reference only these):
+#   minute, tick, supply, supply_left, workers, ore_bank, flux_bank,
+#   brood_points, bases, any_base_ore_saturated, army_supply,
+#   under_attack_at, base_lost, building_done, upgrades_at_least,
+#   enemy_seen{...}, enemy_army_estimate, enemy_expansions_seen,
+#   scout_stale_ticks, own_army composition tags.
+# Available action vocabulary (compiled to ordinary Commands):
+#   train, spend_brood, build, expand, research, scout_with, defend,
+#   attack, posture, tech_toward, army_bias, rebuild, set_rally.

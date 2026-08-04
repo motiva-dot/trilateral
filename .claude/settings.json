@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)", "Bash(cargo test:*)", "Bash(cargo run:*)",
+      "Bash(cargo clippy:*)", "Bash(cargo fmt:*)", "Bash(cargo add:*)",
+      "Bash(cargo update:*)", "Bash(cargo bench:*)", "Bash(cargo doc:*)",
+      "Bash(./scripts/*)", "Bash(rustup:*)",
+      "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)",
+      "Bash(git add:*)", "Bash(git commit:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)", "Bash(sudo:*)", "Bash(rm -rf:*)",
+      "Read(.env)", "Read(.env.*)"
+    ]
+  }
+}

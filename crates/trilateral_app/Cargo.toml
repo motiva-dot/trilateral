@@ -1,0 +1,11 @@
+[package]
+name = "trilateral_app"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+sim_core = { workspace = true }
+sim_systems = { workspace = true }
+sim_content = { workspace = true }
+presentation = { workspace = true }
