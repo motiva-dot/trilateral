@@ -1,5 +1,39 @@
 # SESSION_LOG.md
 
+## PLAY SESSION — 2026-08-04, first ever. Phases 0–3.5 complete.
+The v3 standing rule: a phase whose gate is green but which has not been
+*played* is not done. This is the first entry under that rule, and the first
+time anything in this project has been judged by eye rather than by assertion.
+
+**Architect's report, verbatim in substance:** ran the debug view; drag-select
+worked; right-click moved all three groups of dots and they moved; **they did
+not collide**; escape quit cleanly; felt fine on a laptop trackpad.
+
+**Verdict: passed.** Everything the phase promised, works.
+
+**The one observation that matters is "they didn't collide."** That is correct
+behaviour today and a complete description of what Phase 4 is for. There is no
+steering, no local avoidance and no collision — units are ghosts that pass
+through one another. It is also the single largest gap between this and
+something that reads as an *army* rather than as 500 independent dots, which
+is why Phase 4's work is being reordered around it (see below).
+
+**Trackpad feel is a real data point**, not a footnote. Box-select and
+right-click both being comfortable without a mouse means the input handling is
+not quietly assuming precision pointing — worth preserving.
+
+**Nothing was reported as wrong**, which given this is the first look is more
+suspicious than reassuring. Specific things to watch on the next play session,
+once steering exists: whether motion still reads smooth when units are pushing
+against each other, and whether the right-click marker still feels instant when
+the ordered units cannot immediately move.
+
+**Consequence for Phase 4 ordering.** The plan lists pathfinding before
+steering. That order is being inverted: there is no terrain and no obstacles
+yet, so A* has nothing to path *around*, while collision is the thing that
+makes a group look like a group. Feel first, per the v3 build order's own
+logic. HPA* and flow fields follow once there is a map to need them.
+
 ## Session 2026-08-04 (#3) — Phase 1 COMPLETE. The thesis is proven.
 Phase: 1 → complete | Tests added/passing: 80 / 80, debug and release,
 on x86-64 Linux, ARM64 Linux and x86-64 Windows.

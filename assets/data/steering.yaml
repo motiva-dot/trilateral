@@ -1,0 +1,43 @@
+# steering.yaml — how units push against each other.
+#
+# Separate from engine.yaml on purpose. Those are buffer sizes: changing one is
+# a memory decision. These are FEEL: changing one changes how an army reads on
+# screen, and PRD §7 is explicit that clumping and shoving are tunable because
+# "some friction creates positional skill". A modder tuning how a crowd behaves
+# should not be editing the same file as max_entities.
+#
+# TECH_SPEC §5.2. All values are PLACEHOLDERS pending a play session — these
+# are exactly the numbers IMPLEMENTATION_PLAN's Feel Checkpoint 1 exists to
+# judge, and they are almost certainly wrong on the first attempt.
+
+# Fraction of an overlap resolved per tick, 0..1.
+#
+# 1.0 separates instantly and makes contact feel like billiard balls; low
+# values let units interpenetrate visibly and read as mushy. Brood War's
+# characteristic feel is nearer the middle — units resist being displaced but
+# do give way.
+separation_response: 0.45
+
+# Consecutive ticks of near-zero progress before a moving unit gives up and
+# goes Idle.
+#
+# THE SETTLE RULE. Without it, units that cannot reach a destination shove
+# against each other forever and the whole crowd vibrates — the single most
+# recognisable failure of naive RTS steering. 12 ticks is 0.4 seconds at 30Hz:
+# long enough that a brief squeeze does not cancel a real order, short enough
+# that a jammed unit stops before it looks broken.
+settle_stuck_ticks: 12
+
+# Fraction of a unit's full speed below which a tick counts as "no progress".
+#
+# Not zero: a unit grinding along at 5% of its speed is stuck in every sense
+# that matters to a watching player, and waiting for exactly zero means the
+# settle rule almost never fires.
+settle_progress_fraction: 0.25
+
+# Maximum neighbours one unit resolves against in a tick.
+#
+# A hard bound so a 200-unit pile-up cannot make one tick quadratic. Neighbours
+# are considered in ascending entity index, so which ones get dropped is
+# deterministic (§6.9) rather than dependent on memory layout.
+max_neighbours: 16

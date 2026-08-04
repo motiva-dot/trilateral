@@ -28,9 +28,11 @@
 #![forbid(unsafe_code)]
 
 pub mod engine;
+pub mod steering;
 pub mod tech;
 pub mod units;
 
 pub use engine::capacities_from_yaml;
+pub use steering::steering_from_yaml;
 pub use tech::{ContentError, Effect, EffectValue, Tech, TechKind, TechRegistry};
 pub use units::units_from_yaml;

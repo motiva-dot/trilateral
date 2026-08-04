@@ -224,6 +224,7 @@ mod tests {
                 resource: None,
                 tags: vec![],
             }]),
+            steering: sim_core::SteeringParams::default(),
         }
     }
 

@@ -65,13 +65,21 @@ pub fn command_execution(state: &mut SimState, _reg: &Registries) {
 ///
 /// Ascending entity index, always (§6.9). Units with no `move_speed` in the
 /// registry — resource nodes, buildings — cannot move regardless of state.
-pub fn movement(state: &mut SimState, reg: &Registries) {
+pub fn movement(state: &mut SimState, reg: &Registries, ctx: &crate::SimContext) {
     for i in 0..state.c.capacity() {
         if !state.c.alive.get(i) {
             continue;
         }
         let n = i as usize;
+        let sep = ctx.separation[n];
+
         if state.c.state[n] != UnitState::Moving {
+            // Idle units are still displaced by their neighbours. Without
+            // this, a mover would tunnel through a standing crowd instead of
+            // parting it, and a crowd would never spread out at all.
+            if !sep.is_zero() {
+                state.c.pos[n] += sep;
+            }
             continue;
         }
 
@@ -92,16 +100,36 @@ pub fn movement(state: &mut SimState, reg: &Registries) {
 
         if remaining <= speed {
             // Arrive exactly. See the module note on why this is not an epsilon.
-            state.c.pos[n] = state.c.dest[n];
+            // Separation still applies, or a group ordered to one point would
+            // stack perfectly on top of each other.
+            state.c.pos[n] = state.c.dest[n] + sep;
             state.c.vel[n] = FixedVec2::ZERO;
             state.c.state[n] = UnitState::Idle;
             state.c.dest[n] = FixedVec2::ZERO;
+            state.c.stuck_ticks[n] = 0;
             continue;
         }
 
         let step = to_target.normalize().scale(speed);
-        state.c.vel[n] = step;
-        state.c.pos[n] += step;
+        let total = step + sep;
+        state.c.vel[n] = total;
+        state.c.pos[n] += total;
+
+        // Progress is measured against the DESTINATION, not against distance
+        // travelled. A unit shoved sideways at full speed has moved a lot and
+        // achieved nothing, and the settle rule must count that as stuck.
+        let after = (state.c.dest[n] - state.c.pos[n]).length();
+        let progress = if after >= remaining {
+            Fixed::ZERO
+        } else {
+            remaining - after
+        };
+        if crate::steering::update_settle(state, reg, i, progress, speed) {
+            state.c.state[n] = UnitState::Idle;
+            state.c.dest[n] = FixedVec2::ZERO;
+            state.c.vel[n] = FixedVec2::ZERO;
+            state.c.stuck_ticks[n] = 0;
+        }
     }
 }
 
@@ -153,6 +181,7 @@ mod tests {
                 resource: None,
                 tags: vec![],
             }]),
+            steering: sim_core::SteeringParams::default(),
         }
     }
 
@@ -187,7 +216,7 @@ mod tests {
         // has travelled exactly 15 tiles — no epsilon anywhere in this test.
         let reg = registries();
         let mut s = SimState::new(caps(), 1);
-        let mut ctx = SimContext::new(128, &reg);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 100, 0);
 
@@ -204,7 +233,7 @@ mod tests {
     fn arrival_is_exact_and_the_unit_stops() {
         let reg = registries();
         let mut s = SimState::new(caps(), 1);
-        let mut ctx = SimContext::new(128, &reg);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 2, 0);
 
@@ -229,7 +258,7 @@ mod tests {
         // forever because each tick overshoots and the next corrects back.
         let reg = registries();
         let mut s = SimState::new(caps(), 1);
-        let mut ctx = SimContext::new(128, &reg);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 1, 0);
         for _ in 0..20 {
@@ -246,7 +275,7 @@ mod tests {
     fn a_destination_closer_than_one_step_does_not_overshoot() {
         let reg = registries();
         let mut s = SimState::new(caps(), 1);
-        let mut ctx = SimContext::new(128, &reg);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         // 1/8 tile away, half of one tick's travel.
         s.ingest(IssuedCommand {
@@ -267,7 +296,7 @@ mod tests {
     fn stop_halts_a_moving_unit_where_it_stands() {
         let reg = registries();
         let mut s = SimState::new(caps(), 1);
-        let mut ctx = SimContext::new(128, &reg);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 100, 0);
         for _ in 0..4 {
@@ -298,7 +327,7 @@ mod tests {
         // §5.1: commands execute at issue_tick + input_delay, not on arrival.
         let reg = registries();
         let mut s = SimState::new(caps(), 1);
-        let mut ctx = SimContext::new(128, &reg);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(5), 100, 0);
 
@@ -318,7 +347,7 @@ mod tests {
     fn a_unit_that_dies_before_its_command_executes_is_skipped() {
         let reg = registries();
         let mut s = SimState::new(caps(), 1);
-        let mut ctx = SimContext::new(128, &reg);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(3), 50, 0);
         s.despawn(h);
@@ -334,7 +363,7 @@ mod tests {
         // stand still, not move at some default speed nobody chose.
         let reg = registries();
         let mut s = SimState::new(caps(), 1);
-        let mut ctx = SimContext::new(128, &reg);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = s
             .spawn(Spawn {
                 archetype: ArchetypeId(999),
@@ -356,7 +385,7 @@ mod tests {
         // too far, which is the classic bug when a direction is not normalised.
         let reg = registries();
         let mut s = SimState::new(caps(), 1);
-        let mut ctx = SimContext::new(128, &reg);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 100, 100);
         for _ in 0..40 {
@@ -378,7 +407,7 @@ mod tests {
         fn run() -> u64 {
             let reg = registries();
             let mut s = SimState::new(caps(), 42);
-            let mut ctx = SimContext::new(128, &reg);
+            let mut ctx = SimContext::new(128, &reg, caps().max_entities);
             for i in 0..40i32 {
                 let h = spawn_runner(&mut s, i % 8, i / 8);
                 s.ingest(IssuedCommand {

@@ -72,7 +72,7 @@ pub struct DebugApp {
 impl DebugApp {
     pub fn new(state: SimState, reg: Registries, world_tiles: i32) -> DebugApp {
         let capacity = state.c.capacity();
-        let ctx = SimContext::new(world_tiles, &reg);
+        let ctx = SimContext::new(world_tiles, &reg, capacity);
         let mut view = RenderState::new(capacity);
         view.capture(&state, &reg);
         let mut camera = Camera::new();
