@@ -56,7 +56,7 @@ fn main() {
         steering: steering_from_yaml(STEERING_YAML)
             .expect("assets/data/steering.yaml must be valid"),
     };
-    let mut state = SimState::new(caps, seed);
+    let mut state = SimState::new(caps, seed, WORLD_TILES as u16);
     let mut ctx = SimContext::new(WORLD_TILES, &reg, state.capacities.max_entities);
     populate(&mut state, &reg);
 

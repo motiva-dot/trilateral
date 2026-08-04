@@ -24,6 +24,7 @@
 #![forbid(unsafe_code)]
 
 pub mod movement;
+pub mod path;
 pub mod spatial;
 pub mod steering;
 
@@ -124,7 +125,7 @@ mod tests {
     #[test]
     fn a_tick_advances_the_clock_by_exactly_one() {
         let reg = Registries::default();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         for expected in 1..=10u64 {
             tick(&mut s, &reg, &mut ctx);
@@ -135,8 +136,8 @@ mod tests {
     #[test]
     fn two_identical_runs_stay_hash_equal() {
         let reg = Registries::default();
-        let mut a = SimState::new(caps(), 7);
-        let mut b = SimState::new(caps(), 7);
+        let mut a = SimState::new(caps(), 7, 64);
+        let mut b = SimState::new(caps(), 7, 64);
         let mut ca = SimContext::new(128, &reg, caps().max_entities);
         let mut cb = SimContext::new(128, &reg, caps().max_entities);
         for _ in 0..100 {
@@ -149,7 +150,7 @@ mod tests {
     #[test]
     fn the_spatial_index_tracks_entities_across_ticks() {
         let reg = Registries::default();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         s.spawn(Spawn {
             archetype: ArchetypeId(0),

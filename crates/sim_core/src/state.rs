@@ -23,6 +23,7 @@ use crate::clock::SimClock;
 use crate::command::{CommandLog, IssuedCommand, Reject};
 use crate::components::Components;
 use crate::entity::EntityAllocator;
+use crate::grid::MacroGrid;
 use crate::hash::SimHasher;
 use crate::ids::{ArchetypeId, EntityHandle, PlayerId};
 use crate::rng::SimRng;
@@ -34,6 +35,7 @@ pub struct SimState {
     pub rng: SimRng,
     pub entities: EntityAllocator,
     pub c: Components,
+    pub grid: MacroGrid,
     pub cmd_log: CommandLog,
 }
 
@@ -55,7 +57,7 @@ impl SimState {
     /// If `capacities` is invalid. Callers load them from `engine.yaml` and
     /// should call `Capacities::validate()` first to report the problem with
     /// a message naming the field.
-    pub fn new(capacities: Capacities, seed: u64) -> SimState {
+    pub fn new(capacities: Capacities, seed: u64, world_tiles: u16) -> SimState {
         capacities
             .validate()
             .expect("SimState::new given invalid capacities; validate() first");
@@ -65,6 +67,7 @@ impl SimState {
             rng: SimRng::from_seed(seed),
             entities: EntityAllocator::with_capacity(capacities.max_entities),
             c: Components::new(capacities.max_entities),
+            grid: MacroGrid::new(world_tiles, world_tiles),
             cmd_log: CommandLog::with_reserve(capacities.command_log_reserve),
         }
     }
@@ -147,6 +150,7 @@ impl SimState {
         }
         self.entities.hash_into(&mut h);
         self.c.hash_into(&mut h);
+        self.grid.hash_into(&mut h);
         self.cmd_log.hash_into(&mut h);
         h.finish()
     }
@@ -180,14 +184,14 @@ mod tests {
 
     #[test]
     fn a_new_state_is_empty_and_at_tick_zero() {
-        let s = SimState::new(caps(64), 42);
+        let s = SimState::new(caps(64), 42, 64);
         assert_eq!(s.live_count(), 0);
         assert_eq!(s.clock.tick.0, 0);
     }
 
     #[test]
     fn spawn_populates_the_slot_and_despawn_clears_it() {
-        let mut s = SimState::new(caps(16), 1);
+        let mut s = SimState::new(caps(16), 1, 64);
         let h = s.spawn(spawn_at(3, 4, 7, 1)).unwrap();
         assert!(s.is_alive(h));
         assert_eq!(s.c.pos[h.index as usize], FixedVec2::from_ints(3, 4));
@@ -205,7 +209,7 @@ mod tests {
 
     /// 500 mixed archetypes, per IMPLEMENTATION_PLAN Phase 2.
     fn populated_500(seed: u64) -> SimState {
-        let mut s = SimState::new(caps(2048), seed);
+        let mut s = SimState::new(caps(2048), seed, 64);
         for i in 0..500i32 {
             let sp = Spawn {
                 archetype: ArchetypeId((i % 17) as u16),
@@ -341,7 +345,7 @@ mod tests {
 
     #[test]
     fn running_out_of_capacity_returns_none_rather_than_panicking() {
-        let mut s = SimState::new(caps(4), 1);
+        let mut s = SimState::new(caps(4), 1, 64);
         for _ in 0..4 {
             assert!(s.spawn(spawn_at(0, 0, 0, 0)).is_some());
         }
@@ -352,12 +356,12 @@ mod tests {
     #[test]
     #[should_panic(expected = "invalid capacities")]
     fn invalid_capacities_are_refused_loudly() {
-        SimState::new(caps(0), 1);
+        SimState::new(caps(0), 1, 64);
     }
 
     #[test]
     fn snapshots_are_independent_of_the_state_they_came_from() {
-        let mut s = SimState::new(caps(16), 1);
+        let mut s = SimState::new(caps(16), 1, 64);
         let h = s.spawn(spawn_at(1, 1, 0, 0)).unwrap();
         let snap = s.snapshot();
         s.c.hp[h.index as usize] = 999;

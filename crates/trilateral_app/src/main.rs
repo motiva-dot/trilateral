@@ -31,7 +31,7 @@ fn main() {
         units: units_from_yaml(UNITS_YAML).expect("units.yaml"),
         steering: steering_from_yaml(STEERING_YAML).expect("steering.yaml"),
     };
-    let mut state = SimState::new(caps, 42);
+    let mut state = SimState::new(caps, 42, WORLD_TILES as u16);
     populate(&mut state, &reg);
 
     println!(

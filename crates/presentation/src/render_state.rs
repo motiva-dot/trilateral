@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn interpolation_lands_halfway_at_alpha_one_half() {
         let r = reg();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 0, 0, 0);
         let mut rs = RenderState::new(16);
         rs.capture(&s, &r);
@@ -266,7 +266,7 @@ mod tests {
         // The recycled-slot bug: without the guard, a unit spawning into a
         // dead unit's slot lerps across the map from wherever that one died.
         let r = reg();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 50, 50, 0);
         let mut rs = RenderState::new(16);
         rs.capture(&s, &r);
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn dead_entities_are_not_drawn() {
         let r = reg();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 1, 1, 0);
         spawn(&mut s, 2, 2, 0);
         let mut rs = RenderState::new(16);
@@ -306,7 +306,7 @@ mod tests {
     #[test]
     fn picking_finds_the_nearest_and_breaks_ties_by_lowest_index() {
         let r = reg();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 10, 10, 0);
         spawn(&mut s, 10, 10, 0); // exactly co-located
         spawn(&mut s, 40, 40, 0);
@@ -325,7 +325,7 @@ mod tests {
     #[test]
     fn box_selection_returns_ascending_indices() {
         let r = reg();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         for i in 0..5 {
             spawn(&mut s, i, i, 0);
         }
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn selection_changes_colour_without_touching_the_simulation() {
         let r = reg();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 1, 1, 0);
         let mut rs = RenderState::new(16);
         rs.capture(&s, &r);
@@ -354,7 +354,7 @@ mod tests {
     fn an_unknown_archetype_still_draws_at_a_default_size() {
         // A debug view must never blank out because content is missing.
         let r = Registries::default();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 1, 1, 0);
         let mut rs = RenderState::new(16);
         rs.capture(&s, &r);

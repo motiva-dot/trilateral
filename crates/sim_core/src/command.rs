@@ -320,7 +320,7 @@ mod tests {
     }
 
     fn state_with_two_players() -> (SimState, EntityHandle, EntityHandle, EntityHandle) {
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mine = s
             .spawn(Spawn {
                 archetype: ArchetypeId(1),
@@ -466,7 +466,7 @@ mod tests {
     fn validation_never_panics_on_hostile_input() {
         // Every variant, with maximally hostile arguments, against an empty
         // state. A networked peer can send exactly this.
-        let s = SimState::new(caps(), 1);
+        let s = SimState::new(caps(), 1, 64);
         let bad = EntityHandle::new(u32::MAX, u32::MAX);
         let variants = [
             Command::Move {
