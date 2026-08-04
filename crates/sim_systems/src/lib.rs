@@ -55,6 +55,10 @@ pub struct SimContext {
     /// Set when a unit is pressed against someone walking the same way —
     /// queuing rather than jammed. Slows the settle counter.
     pub queued: Vec<bool>,
+    /// Per-tick neighbour candidate lists in CSR form, so the broad phase is
+    /// paid once per tick rather than once per relaxation pass.
+    pub neighbour_start: Vec<u32>,
+    pub neighbour_data: Vec<u32>,
     /// A* buffers, sized to the map once (§1.4).
     pub path_scratch: crate::path::PathScratch,
     /// Reused by the pathfinder for one search.s output.
@@ -80,6 +84,8 @@ impl SimContext {
             separation: vec![FixedVec2::ZERO; capacity as usize],
             sep_delta: vec![FixedVec2::ZERO; capacity as usize],
             queued: vec![false; capacity as usize],
+            neighbour_start: Vec::with_capacity(capacity as usize + 1),
+            neighbour_data: Vec::with_capacity(capacity as usize * 8),
             path_scratch: crate::path::PathScratch::new(tile_count),
             path_out: Vec::with_capacity(256),
             path_indices: Vec::with_capacity(64),

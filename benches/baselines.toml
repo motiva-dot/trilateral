@@ -4,12 +4,11 @@
 # single gap. Measured over 1,000 ticks after a 200-tick warm-up, release
 # build, on the development machine (Windows 11, x86-64).
 #
-# THESE ARE NOT WHAT CI ENFORCES. Shared runners are noisy enough that a
-# percentage threshold against these numbers would flap constantly. CI checks
-# the TECH_SPEC §9 CEILINGS instead, which have real headroom, so a failure
-# means something got genuinely slower rather than that a neighbour VM was
-# busy. These numbers are here to make a regression legible when someone runs
-# the bench locally and wonders whether 1.4ms is normal.
+# THESE ARE NOT WHAT CI ENFORCES. Shared runners are noisy, and measurably
+# slower — the GitHub runner came in ~29% above this machine on steering. CI
+# checks the TECH_SPEC §9 CEILINGS instead, so a failure means something got
+# genuinely slower rather than that a neighbour VM was busy. These numbers
+# exist to make a local regression legible.
 
 [measured]
 date = "2026-08-04"
@@ -18,40 +17,42 @@ map = "128x128"
 ticks = 1000
 
 # ms per tick
-steering = 2.218          # budget 2.5  — 89%
-pathfinding = 0.002       # budget 1.5  —  0.2%
-movement_spatial = 0.574  # budget 0.8  — 72%
-command_execution = 0.001 # budget 0.4  —  0.3%
-total = 2.796             # PRD §4 target 8.0
+steering = 1.504          # budget 2.5  — 60%
+pathfinding = 0.002       # budget 1.5  —  0.1%
+movement_spatial = 0.557  # budget 0.8  — 70%
+command_execution = 0.001 # budget 0.4  —  0.2%
+total = 2.065             # PRD §4 target 8.0
 
 # --------------------------------------------------------------------------
 # What these numbers say
 # --------------------------------------------------------------------------
 #
-# PATHFINDING IS FREE. 0.2% of its budget. Tile A* with a 16-search-per-tick
+# PATHFINDING IS FREE. 0.1% of its budget. Tile A* with a 16-search-per-tick
 # cap is nowhere near the ceiling at this scale, which is what resolved
-# ADR-012 against building HPA* and flow fields. See the Ledger.
+# ADR-012 against building HPA* and flow fields.
 #
-# STEERING IS THE HOT SPOT, at 89% of its budget, and it is the relaxation
-# passes that put it there. Measured directly:
+# STEERING IS THE HOT SPOT and the only system with a real cost, because of
+# the three relaxation passes that fixed "mushy" at Feel Checkpoint 1.
 #
-#   separation_iterations = 1  ->  0.857 ms  (34%)
-#   separation_iterations = 2  ->  1.359 ms  (54%)
-#   separation_iterations = 3  ->  2.166 ms  (87%)
+# It was 2.218 ms here — and 2.865 ms on a CI runner, which BREACHED the
+# 2.5 ms budget. The fix was not to drop a pass: that would have traded away
+# feel the architect had just approved. The broad-phase query was being redone
+# once per unit per PASS when the candidate set does not change within a tick;
+# caching it per tick took steering to 1.504 ms, a 32% saving.
 #
-# That is the price of the Feel Checkpoint 1 fix for "mushy", and it is worth
-# knowing precisely rather than vaguely: a third of the entire per-tick budget
-# buys the difference between units that look like a crowd and units that look
-# like a smear.
+# The state hash is unchanged by that optimisation (0x504acd51d55aa3ae before
+# and after, per `bench_match --verify`), which is the evidence that it was
+# waste rather than a behaviour change.
 #
-# It also names the lever. If a later phase needs steering headroom, dropping
-# to 2 passes returns ~0.8 ms — and costs feel, which is the architect's call
-# and not an optimisation to make quietly.
+# Cost of the relaxation passes, measured before the cache:
+#   separation_iterations = 1  ->  0.857 ms
+#   separation_iterations = 2  ->  1.359 ms
+#   separation_iterations = 3  ->  2.166 ms
 #
-# The cheaper structural options, in the order they should be tried:
-#   1. Incremental spatial-hash update instead of a full rebuild each tick
-#      (currently inside movement+spatial, not steering, but related).
-#   2. Skip the neighbour query for units whose cell contents did not change.
-#   3. Only run later relaxation passes over units that were still overlapping
-#      after the first — most of a crowd resolves in one pass.
-# None are worth doing at 2.8 ms total against an 8 ms target.
+# If a later phase needs steering headroom, the levers in order of preference:
+#   1. Skip later relaxation passes for units that stopped overlapping after
+#      the first — most of a crowd resolves in one pass.
+#   2. Incremental spatial-hash update instead of a full rebuild per tick
+#      (currently in movement+spatial at 70% of its budget).
+#   3. Drop to 2 relaxation passes. This one costs FEEL and is the architect's
+#      call, not an optimisation to make quietly.
