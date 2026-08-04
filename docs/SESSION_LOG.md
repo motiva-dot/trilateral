@@ -1,5 +1,65 @@
 # SESSION_LOG.md
 
+## Session 2026-08-04 — Phases 2, 3, 3.5 and the Phase 4 gate
+Phases: 2 → complete, 3 → complete, 3.5 → complete, 4 → gate met with two
+items open (ADR-012). Tests: **304**, green in debug and release, on three
+architectures. 13 PRs, all CI-green before merge.
+
+**The determinism arena became real, twice over.** Phase 2 gave it an actual
+`SimState` to fold instead of a hardcoded `0xC0FFEE`; Phase 3 made it run the
+real `tick()` pipeline, so it now folds the results of 10,000 ticks of command
+execution, arrival arithmetic, vector normalisation and spatial reindexing
+across 600 units. Every green before that proved the state store, not the
+simulation. Verified byte-identical between an ARM64 CI runner and this
+Windows machine.
+
+**Delivered:** SoA `SimState` with snapshot/hash; `Command` + validation at
+ingest; four YAML loaders that validate rather than trust; Brood War-derived
+unit stats with a documented 23.81fps → 30Hz conversion; the §3.2 tick
+pipeline; `SpatialHash`; circle separation with mass priority and the settle
+rule; `MacroGrid`; deterministic tile A*; route following with a per-tick
+pathing budget; and the Phase 3.5 debug view.
+
+**Decisions recorded as ADR-005 through ADR-012.** Two amended the spec rather
+than working around it: component arrays became runtime-sized (§1.8 forbids a
+hardcoded `MAX_ENTITIES`), and the "vendored xxh3" hasher was withdrawn in
+favour of an honest custom fold, because a subtly incorrect xxh3 would carry a
+name implying test vectors it does not satisfy.
+
+**Five mistakes worth remembering, all mine:**
+1. A test asserted `100_000²` fits in Q32.32. It does not.
+2. `sqrt`'s maximality cannot be stated via `Fixed::sq` at 1 ULP.
+3. I diagnosed a crowd-vibration bug that did not exist, because
+   `SimState::hash()` folds `clock.tick` and my test asked an impossible
+   question. I believed the result before checking the question.
+4. A one-ULP asymmetry in separation caused real, accumulating drift.
+5. **The important one:** a 20-unit crowd converged to exactly zero and I
+   generalised it. 150 units never converged. Only running the number the plan
+   specified found it. The gate was right to name a number.
+
+**Play session (the first, under the v3 rule):** the architect ran the debug
+view, drag-selected, right-clicked, watched three groups move, and reported
+it fine on a laptop trackpad. The one substantive finding — "they didn't
+collide" — became Phase 4's first work, and inverted its internal order
+(ADR-009).
+
+**Known state of the content:** every gameplay number in the repo is a
+placeholder. BW-derived unit stats are calibrated against published sources
+for Drone/Zergling/Hydralisk and recalled for the rest (marked UNVERIFIED in
+the file). `collider_radius`, `mass`, `turn_rate`, attack arc and the
+frontswing/backswing split have no BW equivalent and are invented — and are
+precisely the values that determine feel. `steering.yaml` is four guesses.
+Weapon/armour ladders are a flat 100/200/300 at the architect's instruction.
+
+**Next session should:**
+1. Build the 1,200-mover bench and revive the `bench-regression` CI job
+   (ADR-001). It decides ADR-012 — whether HPA* is needed at all.
+2. Run Feel Checkpoint 1 against the obstacle map: shoving, group cohesion
+   through the corridor, oscillation, settle behaviour. The numbers above are
+   what that session tunes.
+3. Then Phase 6 (economy + Brood Pool) per the v3 build order — the first
+   phase that produces something recognisably a *game* rather than an engine.
+
 ## PLAY SESSION — 2026-08-04, first ever. Phases 0–3.5 complete.
 The v3 standing rule: a phase whose gate is green but which has not been
 *played* is not done. This is the first entry under that rule, and the first

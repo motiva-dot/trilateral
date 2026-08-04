@@ -1,9 +1,14 @@
 # ARCHITECTURE_LEDGER.md — Claude Code's Long-Term Memory
 
 ## Current State
-- Phase: **1 COMPLETE** — exit gate met 2026-08-04. Next: Phase 2
-  (SoA SimState + registries). Build order is v3 — see IMPLEMENTATION_PLAN.
-- Last session: 2026-08-04 (#3) | Tests: 80, green on 3 architectures
+- Phases **0, 1, 2, 3, 3.5 COMPLETE**; **Phase 4 gate MET** with two items
+  deliberately outstanding (see ADR-012). Build order is v3.
+- Next: the 1,200-mover bench — which decides whether HPA* is needed at all —
+  then Feel Checkpoint 1, then Phase 6 (economy) per the v3 order.
+- Last session: 2026-08-04 | Tests: **304**, green in debug and release
+- Determinism arena runs the REAL `sim_systems::tick()` pipeline for 10,000
+  ticks with 600 units executing move orders, and agrees byte-for-byte across
+  x86-64 Linux, ARM64 Linux and x86-64 Windows.
 - CI: **8/8 green on 3 architectures.** Repo is public at
   github.com/motiva-dot/trilateral so the `ubuntu-24.04-arm` legs run free.
 - `main` is branch-protected: 5 required checks (`lint`, all three
@@ -25,9 +30,26 @@
   `Fixed::{from_ratio, mul, div, sqrt, lerp}`, `FixedVec2::{length_sq_wide,
   normalize, clamp_length, perp, rotate}`, `FixedAngle::{sin, cos, atan2,
   shortest_diff, turn_toward}`.
-- sim_core: stub (deps: trilateral_fixed, serde, smallvec)
-- sim_systems: stub (deps: sim_core)
-- sim_content: stub (deps: sim_core)
+- **sim_core: COMPLETE for phases 2–4.** `SimState` (capacities, clock,
+  `SimRng`, `EntityAllocator`, `Components`, `MacroGrid`, `CommandLog`) with
+  `snapshot`/`restore`/`hash`. `SimHasher`, `BitSet`, `Command` + ingest
+  validation, `PathSlot`, `registry::{UnitStats, SteeringParams, Registries}`.
+  107 tests.
+- **sim_systems: Phase 3–4.** `tick()` is the §3.2 pipeline as a literal call
+  sequence with unwritten steps named in place. `spatial::SpatialHash`,
+  `steering` (separation, mass priority, deadband), `movement` (route
+  following, exact arrival, settle rule), `path` (tile A*), `pathing`
+  (budgeted route assignment). 58 tests incl. `tests/gate.rs`.
+- **sim_content: loaders.** `engine.yaml` → `Capacities`, `units.yaml` →
+  `UnitRegistry`, `tech_tree.yaml` → `TechRegistry`, `steering.yaml` →
+  `SteeringParams`. All validate rather than trust; all tested against the
+  REAL asset files via `include_str!`. 39 tests.
+- **presentation: Phase 3.5 debug view.** wgpu 30 + winit 0.30, instanced
+  circles and squares, camera, selection, interpolation, Frame-0 feedback,
+  ring formation offsets. Read-only over `SimState` by signature. 21 tests.
+- **trilateral_app:** wiring + a scaffold map with obstacles.
+- **tools:** `headless_sim` (the real arena), `gen_tables` (offline).
+- bot · netcode · replay: still stubs.
 - bot · netcode · replay · presentation: stubs
 - trilateral_app: hello-world · tools: headless_sim placeholder-hash stub
 
@@ -185,7 +207,101 @@ arbitrary documents.
 **Not yet done:** `Options` exposes parser limits. Before shipping community
 content, set alias-expansion and depth limits (YAML "billion laughs").
 
+### ADR-008 — Runtime unit types live in `sim_core`, parse-time in `sim_content`
+**Date:** 2026-08-04
+**Decision:** `UnitStats`, `AttackStats`, `Registries` in `sim_core::registry`;
+the serde `Raw*` structs with their `f64` fields stay in `sim_content`, which
+converts once at load.
+**Context:** §1.3 lets `sim_systems` depend on `sim_core` and nothing else, but
+systems need unit speeds. Without the split there is no legal way for a system
+to read a stat.
+**Consequences:** The YAML schema can gain a field or change a spelling without
+touching anything the simulation compiles against, and no serde attribute can
+quietly become load-bearing on tick-rate code. Costs a small amount of
+duplication, which is the point rather than a regret.
+
+### ADR-009 — Phase 4 built steering before pathfinding
+**Date:** 2026-08-04
+**Decision:** Collision and the settle rule shipped before A*, inverting the
+order in IMPLEMENTATION_PLAN.
+**Context:** The first play session's only substantive finding was "they didn't
+collide". There was no terrain at that point, so A* had nothing to path
+*around*, while collision is what makes a group read as a group.
+**Consequences:** None structurally — the two are independent. Recorded because
+the plan's order is otherwise the contract, and a future reader comparing plan
+to history should find the reason here rather than infer carelessness.
+
+### ADR-010 — Strict diagonal corner rule in pathfinding
+**Date:** 2026-08-04
+**Decision:** A diagonal step requires BOTH adjacent orthogonal tiles open, not
+merely one.
+**Context:** The permissive rule is common in grid games where units are points.
+Ours are circles of radius 0.2–0.5 moving continuously, and a building fills
+its whole tile.
+**Consequences:** Units detour around single building corners rather than
+clipping past them. Without this the pathfinder promises routes the collision
+system then refuses to walk — the two layers disagreeing about the same world.
+
+### ADR-011 — `min_push` deadband in separation
+**Date:** 2026-08-04
+**Decision:** Separation pushes below `min_push` (default 1/4096 tile) are
+dropped to zero.
+**Context:** With 20 units a crowd converged to exactly zero movement; with 150
+it never converged at all, still moving after 30,000 ticks. Separation is not a
+pure pairwise force once `max_neighbours` bites — in a dense pile each unit
+resolves against only some of its overlaps, forces are unbalanced, and the
+configuration rotates indefinitely. No value of `separation_response` fixes it.
+**Alternatives:** raise `max_neighbours` (does not fix it in principle, only
+postpones the density at which it appears); accept residual motion (a settled
+army that never stops twitching).
+**Consequences:** Termination is structural: once every push is below the
+threshold nothing moves, permanently and bit-exactly. Sub-threshold overlaps
+persist — 0.008 pixels at normal zoom.
+**Lesson recorded deliberately:** the 20-unit result was true and got
+generalised. Only testing the number the plan specified exposed that the
+property did not scale.
+
+### ADR-012 — HPA* and flow fields deferred pending the bench
+**Date:** 2026-08-04 · **OPEN ITEM, not a cancellation.**
+**Decision:** Phase 4 ships with tile A* plus a per-tick search budget. HPA*
+over 16×16 chunks and integration flow fields are not built yet.
+**Context:** TECH_SPEC §4 specifies both. At 128×128 with 16 searches per tick,
+tile A* may already sit inside the 1.5 ms pathfinding budget — in which case a
+chunk graph and an LRU field cache are speculative work on a problem we do not
+have, and both add invalidation logic that can desync.
+**Consequences:** The 1,200-mover bench decides. If pathing is inside budget,
+these stay unbuilt and TECH_SPEC §4 needs amending to say so; if not, they are
+the fix. Either way the answer comes from a measurement rather than from the
+spec's assumption.
+
 ## Gotchas & Lessons
+
+- **`SimState::hash()` folds `clock.tick`, so it can never test "nothing
+  changed over time".** Comparing hashes across a span of ticks is asking an
+  impossible question, and the inevitable "not equal" reads convincingly as a
+  bug. This produced a false vibration diagnosis that cost real time. Compare
+  the components you actually mean.
+
+- **A one-ULP asymmetry became a real behavioural bug.** Deriving the second
+  unit's separation push as `total - move_i` conserves the correction exactly
+  but makes equal-mass pairs move by amounts differing by one ULP — and a pair
+  that pushes itself asymmetrically every tick acquires net drift, so a crowd
+  never converges. Symmetry beat conservation. In fixed point, "one ULP" is a
+  real number that accumulates rather than a rounding artefact that washes out.
+
+- **`gen` is a reserved keyword in edition 2024.** Cost one compile cycle.
+
+- **wgpu 30 differs substantially from the 24 the doc suite named**:
+  `Queue::present` rather than `SurfaceTexture::present`, `multiview_mask`,
+  `immediate_size` replacing `push_constant_ranges`, `CurrentSurfaceTexture` as
+  an enum rather than a `Result`, Option-wrapped vertex buffer layouts. Read
+  the vendored source rather than guessing; and prefer
+  `Surface::get_default_config` over hand-building a config, so the next major
+  version does not break the file for no benefit.
+
+- **An empty demo map made the pathfinder invisible.** A straight line across
+  open ground looks identical whether A* produced it or a beeline did. Nothing
+  about movement can be judged by eye until there is something to path around.
 
 - **Cargo feature unification defeats the `float_bridge` quarantine.**
   TECH_SPEC §1 says `float_bridge` is confined to `sim_content`. It is not:
