@@ -263,6 +263,9 @@ pub struct SteeringParams {
     /// Pushes below this are dropped to zero, which is what guarantees a
     /// crowd reaches exact stillness rather than cycling forever.
     pub min_push: Fixed,
+    /// Relaxation passes per tick. One pass cannot resolve a chain of
+    /// overlaps, which is what reads as "mushy".
+    pub separation_iterations: u8,
 }
 
 impl Default for SteeringParams {
@@ -271,12 +274,13 @@ impl Default for SteeringParams {
     /// that loaded content and one that did not.
     fn default() -> Self {
         SteeringParams {
-            separation_response: Fixed::from_ratio(45, 100),
-            settle_stuck_ticks: 12,
-            settle_progress_fraction: Fixed::from_ratio(25, 100),
+            separation_response: Fixed::from_ratio(85, 100),
+            settle_stuck_ticks: 45,
+            settle_progress_fraction: Fixed::from_ratio(6, 100),
             max_neighbours: 16,
             max_paths_per_tick: 16,
             min_push: Fixed::from_ratio(1, 4096),
+            separation_iterations: 3,
         }
     }
 }

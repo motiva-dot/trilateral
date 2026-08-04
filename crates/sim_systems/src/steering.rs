@@ -39,6 +39,54 @@ pub fn steering(state: &SimState, reg: &Registries, ctx: &mut SimContext) {
     for s in ctx.separation.iter_mut() {
         *s = FixedVec2::ZERO;
     }
+    for q in ctx.queued.iter_mut() {
+        *q = false;
+    }
+    let p = reg.steering;
+
+    // RELAXATION PASSES. One pass cannot resolve a chain: moving B away from A
+    // pushes it into C, and what is left over is what reads as "mushy" — units
+    // visibly sitting inside each other because the solver never catches up
+    // while they keep walking together.
+    //
+    // Each pass is the same pure two-pass computation, reading
+    // positions-plus-corrections-so-far and writing into a separate delta
+    // buffer, so iterating costs determinism nothing.
+    let passes = p.separation_iterations.max(1);
+    for pass in 0..passes {
+        resolve_pass(state, reg, ctx, pass == 0);
+    }
+
+    // DEADBAND. Drop pushes too small to matter, so a crowd terminates.
+    //
+    // Separation is not a pure pairwise force once `max_neighbours` bites: in
+    // a dense pile a unit resolves against only some of its overlaps, the
+    // forces are unbalanced, and the configuration can rotate forever without
+    // reaching zero. Measured with 150 units on one point, the crowd was still
+    // moving after 30,000 ticks.
+    //
+    // The deadband makes termination structural: once every push is below it,
+    // nothing moves, permanently and bit-exactly. Sub-threshold overlaps
+    // persist — at 1/4096 of a tile, roughly 0.008 pixels at normal zoom.
+    if p.min_push > Fixed::ZERO {
+        for s in ctx.separation.iter_mut() {
+            if !s.is_zero() && s.length() < p.min_push {
+                *s = FixedVec2::ZERO;
+            }
+        }
+    }
+}
+
+/// One relaxation pass. Reads `pos + separation`, writes into `sep_delta`,
+/// then folds the delta in — so the pass is a pure function of the state it
+/// started from, and pair resolution cannot depend on iteration order.
+///
+/// `mark_queued` is only set on the first pass; the flag is about who is
+/// standing where, which does not change between passes.
+fn resolve_pass(state: &SimState, reg: &Registries, ctx: &mut SimContext, mark_queued: bool) {
+    for d in ctx.sep_delta.iter_mut() {
+        *d = FixedVec2::ZERO;
+    }
     let p = reg.steering;
     let cap = state.c.capacity();
 
@@ -53,9 +101,12 @@ pub fn steering(state: &SimState, reg: &Registries, ctx: &mut SimContext) {
         let mass_i = mass_of(state, reg, i);
 
         // Query a neighbourhood wide enough for the largest possible overlap.
+        // The broad phase uses the tick's starting position; corrections are
+        // far smaller than a cell, so the candidate set does not change.
         let reach = ri + reg.units.max_collider_radius();
         ctx.spatial
             .query_square(state.c.pos[i as usize], reach, &mut ctx.query_scratch);
+        let pos_i = state.c.pos[i as usize] + ctx.separation[i as usize];
 
         let mut resolved = 0u16;
         for k in 0..ctx.query_scratch.len() {
@@ -77,7 +128,8 @@ pub fn steering(state: &SimState, reg: &Registries, ctx: &mut SimContext) {
                 continue;
             }
 
-            let delta = state.c.pos[j as usize] - state.c.pos[i as usize];
+            let pos_j = state.c.pos[j as usize] + ctx.separation[j as usize];
+            let delta = pos_j - pos_i;
             let sum_r = ri + rj;
             // Compare squared, widened: no square root in the rejection test,
             // which is the overwhelmingly common case.
@@ -118,29 +170,34 @@ pub fn steering(state: &SimState, reg: &Registries, ctx: &mut SimContext) {
             let move_i = total.mul(Fixed::from_ratio(mass_j as i64, denom));
             let move_j = total.mul(Fixed::from_ratio(mass_i as i64, denom));
 
-            ctx.separation[i as usize] -= axis.scale(move_i);
-            ctx.separation[j as usize] += axis.scale(move_j);
+            ctx.sep_delta[i as usize] -= axis.scale(move_i);
+            ctx.sep_delta[j as usize] += axis.scale(move_j);
+
+            // QUEUING vs STUCK. A unit pressed against someone who is
+            // themselves walking the same way is waiting in line, not jammed —
+            // and telling a queuing unit to give up is exactly the "units give
+            // up early" the architect saw at the corridor mouth.
+            //
+            // "Ahead" is judged against the unit's own velocity, so two units
+            // shoving head-on do not both count as queuing.
+            if mark_queued {
+                use sim_core::components::UnitState;
+                if state.c.state[j as usize] == UnitState::Moving
+                    && delta.dot(state.c.vel[i as usize]) > Fixed::ZERO
+                {
+                    ctx.queued[i as usize] = true;
+                }
+                if state.c.state[i as usize] == UnitState::Moving
+                    && (-delta).dot(state.c.vel[j as usize]) > Fixed::ZERO
+                {
+                    ctx.queued[j as usize] = true;
+                }
+            }
         }
     }
 
-    // DEADBAND. Drop pushes too small to matter, so a crowd terminates.
-    //
-    // Separation is not a pure pairwise force once `max_neighbours` bites: in
-    // a dense pile a unit resolves against only some of its overlaps, the
-    // forces are unbalanced, and the configuration can rotate forever without
-    // reaching zero. Measured with 150 units ordered onto one point, the crowd
-    // was still moving after 30,000 ticks.
-    //
-    // The deadband makes termination structural rather than hoped-for: once
-    // every push is below it, nothing moves, permanently and bit-exactly. The
-    // cost is that sub-threshold overlaps persist — at the default 1/4096 of a
-    // tile, roughly 0.008 pixels at normal zoom.
-    if p.min_push > Fixed::ZERO {
-        for s in ctx.separation.iter_mut() {
-            if !s.is_zero() && s.length() < p.min_push {
-                *s = FixedVec2::ZERO;
-            }
-        }
+    for (s, d) in ctx.separation.iter_mut().zip(ctx.sep_delta.iter()) {
+        *s += *d;
     }
 }
 
@@ -174,12 +231,21 @@ pub fn update_settle(
     i: u32,
     actual_progress: Fixed,
     speed: Fixed,
+    queued: bool,
 ) -> bool {
     let p = reg.steering;
     let n = i as usize;
     let threshold = speed.mul(p.settle_progress_fraction);
     if actual_progress < threshold {
-        state.c.stuck_ticks[n] = state.c.stuck_ticks[n].saturating_add(1);
+        // A unit waiting behind someone walking the same way is queuing, not
+        // jammed, and telling it to give up is exactly the "units give up
+        // early" seen at the corridor mouth. It still accrues patience — just
+        // a quarter as fast — so a queue that never moves eventually settles
+        // rather than deadlocking.
+        let counts = !queued || state.clock.tick.0.is_multiple_of(4);
+        if counts {
+            state.c.stuck_ticks[n] = state.c.stuck_ticks[n].saturating_add(1);
+        }
     } else {
         state.c.stuck_ticks[n] = 0;
     }
@@ -365,8 +431,25 @@ mod tests {
         let mut cb = ctx_for(&b, &reg);
         steering(&b, &reg, &mut cb);
 
-        // Indices swap, magnitudes must not.
-        assert_eq!(ca.separation[0].x.abs(), cb.separation[1].x.abs());
+        // Indices swap, magnitudes must not — to within a ULP.
+        //
+        // The tolerance is deliberate and is NOT a weakened determinism claim.
+        // Determinism means identical inputs give identical outputs, which is
+        // asserted exactly elsewhere. This test asserts something stronger and
+        // different: mirror symmetry across two DIFFERENT configurations.
+        //
+        // Iterative relaxation does not preserve that to the last bit, because
+        // `Fixed::mul` floors — and floor is not sign-symmetric, so a chain of
+        // corrections through a mirrored geometry can end one ULP apart. Three
+        // passes is enough for that to show. Demanding exact equality here
+        // would be demanding a property the arithmetic does not have and the
+        // engine does not need.
+        let a = ca.separation[0].x.abs();
+        let b = cb.separation[1].x.abs();
+        assert!(
+            (a - b).abs() <= Fixed::from_bits(2),
+            "mirrored configurations diverged by more than a ULP: {a:?} vs {b:?}"
+        );
     }
 
     #[test]

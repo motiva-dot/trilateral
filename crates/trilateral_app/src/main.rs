@@ -97,10 +97,19 @@ fn build_obstacles(state: &mut SimState) {
 /// A readable starting arrangement: three blocks of units, one per player,
 /// spread far enough apart that group movement is visible.
 fn populate(state: &mut SimState, reg: &Registries) {
-    let roster: Vec<u16> = ["mur_mite", "mur_drone", "mur_lasher"]
-        .iter()
-        .map(|id| reg.units.index_of(id).expect("unit missing") as u16)
-        .collect();
+    // Includes the supply sac (mass 8) among mass-1 mites, so heavier-shoves-
+    // lighter is actually observable. With only light units on screen, mass
+    // priority is implemented and invisible.
+    let roster: Vec<u16> = [
+        "mur_mite",
+        "mur_drone",
+        "mur_lasher",
+        "mur_mite",
+        "mur_supply_sac",
+    ]
+    .iter()
+    .map(|id| reg.units.index_of(id).expect("unit missing") as u16)
+    .collect();
 
     for i in 0..DEMO_UNITS {
         let player = (i % 3) as u8;

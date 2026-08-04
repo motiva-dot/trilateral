@@ -1,5 +1,50 @@
 # SESSION_LOG.md
 
+## FEEL CHECKPOINT 1 — 2026-08-04. First real feel data. VERDICT: needs work.
+
+Architect ran the obstacle map and reported, verbatim in substance:
+1. **"Units do give up early."**
+2. **"I didn.t see much"** (of the pillar-field oscillation question).
+3. **"It is mushy and doesn.t feel distinct enough for later expectations."**
+4. **"This needs work."**
+
+This is the first feedback in the project that changed engine behaviour rather
+than numbers, and it is worth more than the 304 tests that preceded it: all of
+(1) and (3) were invisible to every test we had, because both are about how
+something looks over time rather than whether a value is correct.
+
+**Response to (1) — giving up early.** Two changes, one tuning and one real.
+- settle_stuck_ticks 12 -> 45, settle_progress_fraction 0.25 -> 0.06. A unit
+  must now be almost completely stopped for 1.5 seconds, not 0.4.
+- THE ACTUAL BUG: the settle rule could not distinguish JAMMED from QUEUING.
+  A unit pressed against someone walking the same way is waiting in line, and
+  telling it to give up is precisely what was seen at the corridor mouth.
+  Steering now marks a unit `queued` when it overlaps a Moving neighbour that
+  is ahead in its own direction of travel, and a queued unit accrues patience
+  at a quarter rate. It still settles eventually, so a genuinely dead queue
+  cannot deadlock.
+
+**Response to (3) — mushiness.** Also two changes, one tuning and one real.
+- separation_response 0.45 -> 0.85.
+- THE ACTUAL CAUSE: a single pass cannot resolve a CHAIN. If A overlaps B and
+  B overlaps C, pushing B off A drives it into C, and the leftover is exactly
+  what "mushy" looks like. Separation now runs 3 relaxation passes per tick,
+  each a pure two-pass computation over positions-plus-corrections-so-far, so
+  iterating costs determinism nothing.
+- Plus a visual half: units now draw with a darkened rim. Two touching units
+  without one read as a single larger blob, which is the same complaint even
+  when the collision underneath is perfect.
+
+**Response to (2).** Taken as inconclusive rather than as a pass. Also fixed a
+reason it may have been unobservable: the demo roster was all light units, so
+mass priority was implemented and invisible. The supply sac (mass 8) is now on
+screen among mass-1 mites.
+
+**Still unjudged, and the agenda for Feel Checkpoint 2:** whether 0.85 is now
+too crisp rather than too mushy, whether the corridor files properly, whether
+45 ticks of patience is too forgiving in the opposite direction, and whether
+the rim helps or just adds noise.
+
 ## PLAY SESSION — 2026-08-04 (second). Collision.
 Architect ran the debug view after Phase 4 landed. Verdict: **"the collision
 seemed ok."**

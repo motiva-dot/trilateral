@@ -49,6 +49,12 @@ pub struct SimContext {
     /// `steering`, consumed by `movement` — which is the single place
     /// positions are ever written.
     pub separation: Vec<FixedVec2>,
+    /// Scratch for one relaxation pass, so each pass stays a pure function
+    /// of the state it started from.
+    pub sep_delta: Vec<FixedVec2>,
+    /// Set when a unit is pressed against someone walking the same way —
+    /// queuing rather than jammed. Slows the settle counter.
+    pub queued: Vec<bool>,
     /// A* buffers, sized to the map once (§1.4).
     pub path_scratch: crate::path::PathScratch,
     /// Reused by the pathfinder for one search.s output.
@@ -72,6 +78,8 @@ impl SimContext {
             query_scratch: Vec::with_capacity(256),
             // Sized once at match start (§1.4); never grows afterwards.
             separation: vec![FixedVec2::ZERO; capacity as usize],
+            sep_delta: vec![FixedVec2::ZERO; capacity as usize],
+            queued: vec![false; capacity as usize],
             path_scratch: crate::path::PathScratch::new(tile_count),
             path_out: Vec::with_capacity(256),
             path_indices: Vec::with_capacity(64),

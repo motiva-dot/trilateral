@@ -165,7 +165,8 @@ pub fn movement(state: &mut SimState, reg: &Registries, ctx: &crate::SimContext)
         } else {
             remaining - after
         };
-        if crate::steering::update_settle(state, reg, i, progress, speed) {
+        let queued = ctx.queued[n];
+        if crate::steering::update_settle(state, reg, i, progress, speed, queued) {
             state.c.state[n] = UnitState::Idle;
             state.c.dest[n] = FixedVec2::ZERO;
             state.c.vel[n] = FixedVec2::ZERO;
