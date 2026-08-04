@@ -215,7 +215,7 @@ mod tests {
         // exact fixed values". Speed 1/4 tile/tick, so after 60 ticks the unit
         // has travelled exactly 15 tiles — no epsilon anywhere in this test.
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 100, 0);
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn arrival_is_exact_and_the_unit_stops() {
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 2, 0);
@@ -257,7 +257,7 @@ mod tests {
         // The failure this guards: a unit that oscillates around its target
         // forever because each tick overshoots and the next corrects back.
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 1, 0);
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn a_destination_closer_than_one_step_does_not_overshoot() {
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         // 1/8 tile away, half of one tick's travel.
@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn stop_halts_a_moving_unit_where_it_stands() {
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 100, 0);
@@ -326,7 +326,7 @@ mod tests {
     fn a_command_scheduled_for_a_future_tick_waits_for_it() {
         // §5.1: commands execute at issue_tick + input_delay, not on arrival.
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(5), 100, 0);
@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn a_unit_that_dies_before_its_command_executes_is_skipped() {
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(3), 50, 0);
@@ -362,7 +362,7 @@ mod tests {
         // A corrupt or hostile replay can name any ArchetypeId. The unit should
         // stand still, not move at some default speed nobody chose.
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = s
             .spawn(Spawn {
@@ -384,7 +384,7 @@ mod tests {
         // Normalize then scale: a diagonal move must not travel sqrt(2) times
         // too far, which is the classic bug when a direction is not normalised.
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         let mut ctx = SimContext::new(128, &reg, caps().max_entities);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 100, 100);
@@ -406,7 +406,7 @@ mod tests {
         // happening rather than an empty state ticking.
         fn run() -> u64 {
             let reg = registries();
-            let mut s = SimState::new(caps(), 42);
+            let mut s = SimState::new(caps(), 42, 64);
             let mut ctx = SimContext::new(128, &reg, caps().max_entities);
             for i in 0..40i32 {
                 let h = spawn_runner(&mut s, i % 8, i / 8);

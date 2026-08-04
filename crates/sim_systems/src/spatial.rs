@@ -165,7 +165,7 @@ mod tests {
     }
 
     fn state_with(points: &[(i32, i32)]) -> SimState {
-        let mut s = SimState::new(caps(64), 1);
+        let mut s = SimState::new(caps(64), 1, 64);
         for &(x, y) in points {
             s.spawn(Spawn {
                 archetype: ArchetypeId(0),

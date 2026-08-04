@@ -232,7 +232,7 @@ mod tests {
 
     fn crowd(n: i64) -> (SimState, Registries, SimContext) {
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         for i in 0..n {
             spawn(&mut s, 0, 20 + i % 3, 20 + i % 2, 1);
         }
@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn separated_units_are_left_alone() {
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 0, 0, 0, 1);
         spawn(&mut s, 0, 10, 0, 1);
         let mut ctx = ctx_for(&s, &reg);
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn overlapping_units_push_apart_along_the_line_between_them() {
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 0, 0, 0, 1);
         spawn(&mut s, 0, 1, 0, 2); // 0.5 apart, radii sum 1.0 -> overlapping
         let mut ctx = ctx_for(&s, &reg);
@@ -280,7 +280,7 @@ mod tests {
     #[test]
     fn equal_masses_share_the_correction_equally() {
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 0, 0, 0, 1);
         spawn(&mut s, 0, 1, 0, 2);
         let mut ctx = ctx_for(&s, &reg);
@@ -294,7 +294,7 @@ mod tests {
     fn heavier_units_shove_lighter_ones() {
         // §5.2, and the reason big units feel big.
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 0, 0, 0, 1); // light, mass 1
         spawn(&mut s, 1, 1, 0, 2); // heavy, mass 20
         let mut ctx = ctx_for(&s, &reg);
@@ -314,7 +314,7 @@ mod tests {
         // dist == 0 has no meaningful axis. Any answer will do EXCEPT an
         // arbitrary one — both clients must choose the same escape direction.
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 0, 5, 5, 1);
         spawn(&mut s, 0, 5, 5, 1);
         let mut ctx = ctx_for(&s, &reg);
@@ -333,13 +333,13 @@ mod tests {
         // The property two-pass buys: pair resolution does not depend on which
         // unit the loop happened to reach first.
         let reg = registries();
-        let mut a = SimState::new(caps(), 1);
+        let mut a = SimState::new(caps(), 1, 64);
         spawn(&mut a, 0, 0, 0, 1);
         spawn(&mut a, 0, 1, 0, 2);
         let mut ca = ctx_for(&a, &reg);
         steering(&a, &reg, &mut ca);
 
-        let mut b = SimState::new(caps(), 1);
+        let mut b = SimState::new(caps(), 1, 64);
         spawn(&mut b, 0, 1, 0, 2);
         spawn(&mut b, 0, 0, 0, 1);
         let mut cb = ctx_for(&b, &reg);
@@ -355,7 +355,7 @@ mod tests {
         // would otherwise never converge: equal-mass units pushing each other
         // must move the pair's midpoint by exactly nothing, forever.
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         spawn(&mut s, 0, 0, 0, 1);
         spawn(&mut s, 0, 1, 0, 2);
         let midpoint = |st: &SimState| (st.c.pos[0] + st.c.pos[1]).scale(Fixed::from_ratio(1, 2));
@@ -409,7 +409,7 @@ mod tests {
     fn a_crowd_actually_separates_rather_than_merely_stopping() {
         // The lazy way to pass the test above is to never move anything.
         let reg = registries();
-        let mut s = SimState::new(caps(), 1);
+        let mut s = SimState::new(caps(), 1, 64);
         for _ in 0..8 {
             spawn(&mut s, 0, 20, 20, 1); // all exactly co-located
         }
@@ -434,7 +434,7 @@ mod tests {
     fn steering_is_reproducible_across_identical_runs() {
         fn run() -> u64 {
             let reg = registries();
-            let mut s = SimState::new(caps(), 9);
+            let mut s = SimState::new(caps(), 9, 64);
             for i in 0..30i64 {
                 spawn(&mut s, (i % 2) as u16, 20 + i % 5, 20 + i % 4, 1);
             }
