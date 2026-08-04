@@ -9,3 +9,5 @@ sim_core = { workspace = true }
 sim_systems = { workspace = true }
 sim_content = { workspace = true }
 presentation = { workspace = true }
+winit = { version = "0.30.13", default-features = false, features = ["x11", "wayland", "wayland-dlopen", "rwh_06"] }
+trilateral_fixed = { workspace = true, features = ["float_bridge"] }
