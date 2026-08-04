@@ -18,6 +18,7 @@ struct RawSteering {
     max_neighbours: u16,
     max_paths_per_tick: u16,
     min_push: f64,
+    separation_iterations: u8,
 }
 
 pub fn steering_from_yaml(src: &str) -> Result<SteeringParams, ContentError> {
@@ -54,6 +55,7 @@ pub fn steering_from_yaml(src: &str) -> Result<SteeringParams, ContentError> {
         max_neighbours: raw.max_neighbours,
         max_paths_per_tick: raw.max_paths_per_tick,
         min_push: Fixed::from_f64(raw.min_push),
+        separation_iterations: raw.separation_iterations,
     })
 }
 
@@ -66,9 +68,9 @@ mod tests {
     #[test]
     fn the_real_steering_file_loads() {
         let p = steering_from_yaml(REAL).unwrap_or_else(|e| panic!("steering.yaml: {e}"));
-        assert_eq!(p.settle_stuck_ticks, 12);
+        assert_eq!(p.settle_stuck_ticks, 45);
         assert_eq!(p.max_neighbours, 16);
-        assert_eq!(p.separation_response, Fixed::from_f64(0.45));
+        assert_eq!(p.separation_response, Fixed::from_f64(0.85));
     }
 
     #[test]

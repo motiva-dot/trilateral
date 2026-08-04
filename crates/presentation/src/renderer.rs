@@ -55,10 +55,16 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     if (d > 1.0) {
         discard;
     }
-    // Feathered edge. Cheap anti-aliasing that also makes overlapping units
-    // readable as separate shapes rather than one blob.
-    let a = 1.0 - smoothstep(0.82, 1.0, d);
-    return vec4<f32>(in.colour.rgb, in.colour.a * a);
+    // Feathered edge for cheap anti-aliasing, plus a darkened rim.
+    //
+    // The rim is what makes a packed crowd read as distinct units rather than
+    // one coloured mass. Without it, two units touching look like one larger
+    // blob, which is the "not distinct enough" complaint even when the
+    // collision underneath is doing exactly the right thing.
+    let a = 1.0 - smoothstep(0.86, 1.0, d);
+    let rim = smoothstep(0.62, 0.92, d);
+    let shaded = mix(in.colour.rgb, in.colour.rgb * 0.38, rim);
+    return vec4<f32>(shaded, in.colour.a * a);
 }
 "#;
 
