@@ -47,11 +47,19 @@ pub fn command_execution(state: &mut SimState, _reg: &Registries) {
             Command::Move { target } => {
                 state.c.dest[i] = target;
                 state.c.state[i] = UnitState::Moving;
+                // Discard any route to the old destination; the pathfinder
+                // hands out a new one next tick.
+                state.c.path[i].clear();
+                state.c.stuck_ticks[i] = 0;
             }
             Command::Stop | Command::HoldPosition => {
                 state.c.dest[i] = FixedVec2::ZERO;
                 state.c.vel[i] = FixedVec2::ZERO;
                 state.c.state[i] = UnitState::Idle;
+                // Drop the route too. Without this a stopped unit keeps its
+                // old waypoints and resumes the moment anything sets it
+                // Moving again — a Stop that does not stop.
+                state.c.path[i].clear();
             }
             // Every other variant belongs to a system that does not exist yet.
             // Deliberately ignored rather than partially implemented: a command
@@ -95,18 +103,48 @@ pub fn movement(state: &mut SimState, reg: &Registries, ctx: &crate::SimContext)
             continue;
         }
 
-        let to_target = state.c.dest[n] - state.c.pos[n];
+        // Follow the route, not the crow's flight. The pathfinder (§3.2 step
+        // 12) fills this in; a unit whose slot is still empty is waiting its
+        // turn in the budget and has simply not set off yet.
+        let slot = state.c.path[n];
+        let Some(waypoint_tile) = slot.current() else {
+            if !sep.is_zero() {
+                state.c.pos[n] += sep;
+            }
+            continue;
+        };
+        let final_leg = slot.on_final_leg();
+        // Intermediate waypoints aim at tile centres; the LAST leg aims at the
+        // real destination. Aiming the last leg at a tile centre too would put
+        // every unit ordered to the same spot at the same spot, and would make
+        // a right-click land up to half a tile from where the player clicked.
+        let target = if final_leg {
+            state.c.dest[n]
+        } else {
+            state.grid.tile_centre(state.grid.from_index(waypoint_tile))
+        };
+
+        let to_target = target - state.c.pos[n];
         let remaining = to_target.length();
 
         if remaining <= speed {
-            // Arrive exactly. See the module note on why this is not an epsilon.
-            // Separation still applies, or a group ordered to one point would
-            // stack perfectly on top of each other.
-            state.c.pos[n] = state.c.dest[n] + sep;
-            state.c.vel[n] = FixedVec2::ZERO;
-            state.c.state[n] = UnitState::Idle;
-            state.c.dest[n] = FixedVec2::ZERO;
-            state.c.stuck_ticks[n] = 0;
+            if final_leg {
+                // Arrive exactly. See the module note on why this is not an
+                // epsilon. Separation still applies, or a group ordered to one
+                // point would stack perfectly on top of each other.
+                state.c.pos[n] = target + sep;
+                state.c.vel[n] = FixedVec2::ZERO;
+                state.c.state[n] = UnitState::Idle;
+                state.c.dest[n] = FixedVec2::ZERO;
+                state.c.stuck_ticks[n] = 0;
+                state.c.path[n].clear();
+            } else {
+                // Corner reached: take it and aim at the next one from here.
+                state.c.pos[n] = target + sep;
+                state.c.vel[n] = to_target;
+                state.c.path[n].advance();
+                state.c.stuck_ticks[n] = 0;
+            }
             continue;
         }
 
@@ -115,10 +153,13 @@ pub fn movement(state: &mut SimState, reg: &Registries, ctx: &crate::SimContext)
         state.c.vel[n] = total;
         state.c.pos[n] += total;
 
-        // Progress is measured against the DESTINATION, not against distance
-        // travelled. A unit shoved sideways at full speed has moved a lot and
-        // achieved nothing, and the settle rule must count that as stuck.
-        let after = (state.c.dest[n] - state.c.pos[n]).length();
+        // Progress is measured against the current WAYPOINT, not against
+        // distance travelled. A unit shoved sideways at full speed has moved a
+        // lot and achieved nothing, and the settle rule must count that as
+        // stuck. Measuring against the waypoint rather than the final
+        // destination also means a unit rounding a corner — briefly moving
+        // away from its destination on purpose — is not mistaken for jammed.
+        let after = (target - state.c.pos[n]).length();
         let progress = if after >= remaining {
             Fixed::ZERO
         } else {
@@ -216,7 +257,7 @@ mod tests {
         // has travelled exactly 15 tiles — no epsilon anywhere in this test.
         let reg = registries();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 100, 0);
 
@@ -233,7 +274,7 @@ mod tests {
     fn arrival_is_exact_and_the_unit_stops() {
         let reg = registries();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 2, 0);
 
@@ -258,7 +299,7 @@ mod tests {
         // forever because each tick overshoots and the next corrects back.
         let reg = registries();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 1, 0);
         for _ in 0..20 {
@@ -275,7 +316,7 @@ mod tests {
     fn a_destination_closer_than_one_step_does_not_overshoot() {
         let reg = registries();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         let h = spawn_runner(&mut s, 0, 0);
         // 1/8 tile away, half of one tick's travel.
         s.ingest(IssuedCommand {
@@ -296,7 +337,7 @@ mod tests {
     fn stop_halts_a_moving_unit_where_it_stands() {
         let reg = registries();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 100, 0);
         for _ in 0..4 {
@@ -327,7 +368,7 @@ mod tests {
         // §5.1: commands execute at issue_tick + input_delay, not on arrival.
         let reg = registries();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(5), 100, 0);
 
@@ -347,7 +388,7 @@ mod tests {
     fn a_unit_that_dies_before_its_command_executes_is_skipped() {
         let reg = registries();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(3), 50, 0);
         s.despawn(h);
@@ -363,7 +404,7 @@ mod tests {
         // stand still, not move at some default speed nobody chose.
         let reg = registries();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         let h = s
             .spawn(Spawn {
                 archetype: ArchetypeId(999),
@@ -385,7 +426,7 @@ mod tests {
         // too far, which is the classic bug when a direction is not normalised.
         let reg = registries();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         let h = spawn_runner(&mut s, 0, 0);
         order_move(&mut s, h, Tick(0), 100, 100);
         for _ in 0..40 {
@@ -407,7 +448,7 @@ mod tests {
         fn run() -> u64 {
             let reg = registries();
             let mut s = SimState::new(caps(), 42, 64);
-            let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+            let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
             for i in 0..40i32 {
                 let h = spawn_runner(&mut s, i % 8, i / 8);
                 s.ingest(IssuedCommand {

@@ -40,6 +40,95 @@ pub enum UnitState {
     Constructing = 5,
 }
 
+/// A unit's remaining route: tile indices to walk through, and how far along
+/// it is. Fixed capacity, because §1.4 forbids per-unit heap allocation.
+///
+/// # Why a capacity at all, and why 24
+/// A full tile path across a 128x128 map can be hundreds of tiles. Storing
+/// that per unit would be megabytes of state to snapshot and hash every tick.
+/// The path is SIMPLIFIED to corners first (see `sim_systems::path::simplify`),
+/// which collapses long straight runs to their endpoints — 24 corners is a
+/// very convoluted route. When a path does exceed the slot the unit walks what
+/// it has and re-paths on arrival, which is also what makes it react to
+/// buildings placed after it set off.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct PathSlot {
+    tiles: [u32; PathSlot::CAPACITY],
+    len: u8,
+    cursor: u8,
+}
+
+impl Default for PathSlot {
+    fn default() -> Self {
+        PathSlot::EMPTY
+    }
+}
+
+impl PathSlot {
+    pub const CAPACITY: usize = 24;
+    pub const EMPTY: PathSlot = PathSlot {
+        tiles: [0; Self::CAPACITY],
+        len: 0,
+        cursor: 0,
+    };
+
+    /// Replace the route. Entries beyond `len` are zeroed rather than left as
+    /// they were: the whole array is hashed, so stale tail data from a previous
+    /// path would make two identical routes hash differently.
+    pub fn set(&mut self, tiles: &[u32]) {
+        self.tiles = [0; Self::CAPACITY];
+        let n = tiles.len().min(Self::CAPACITY);
+        self.tiles[..n].copy_from_slice(&tiles[..n]);
+        self.len = n as u8;
+        self.cursor = 0;
+    }
+
+    pub fn clear(&mut self) {
+        *self = PathSlot::EMPTY;
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.cursor >= self.len
+    }
+
+    /// The tile currently being walked toward.
+    #[inline]
+    pub fn current(&self) -> Option<u32> {
+        if self.is_empty() {
+            None
+        } else {
+            Some(self.tiles[self.cursor as usize])
+        }
+    }
+
+    /// Whether the current waypoint is the last one — the leg that ends at the
+    /// real destination rather than a tile centre.
+    #[inline]
+    pub fn on_final_leg(&self) -> bool {
+        self.cursor + 1 >= self.len
+    }
+
+    #[inline]
+    pub fn advance(&mut self) {
+        self.cursor = self.cursor.saturating_add(1);
+    }
+
+    /// Waypoints remaining, including the current one.
+    #[inline]
+    pub fn remaining(&self) -> usize {
+        (self.len.saturating_sub(self.cursor)) as usize
+    }
+
+    pub fn hash_into(&self, h: &mut SimHasher) {
+        for t in &self.tiles {
+            h.write_u32(*t);
+        }
+        h.write_u8(self.len);
+        h.write_u8(self.cursor);
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Components {
     pub alive: BitSet,
@@ -61,6 +150,9 @@ pub struct Components {
     /// idle friends near its destination gives up rather than shoving
     /// forever, which is what stops a crowd vibrating.
     pub stuck_ticks: Box<[u8]>,
+    /// Remaining route. Empty while Idle, or while a mover is waiting for
+    /// the pathfinder to reach it within this tick.s budget.
+    pub path: Box<[PathSlot]>,
 }
 
 impl Components {
@@ -82,6 +174,7 @@ impl Components {
             state: vec![UnitState::Idle; n].into_boxed_slice(),
             target: vec![OptionalHandle::NONE; n].into_boxed_slice(),
             stuck_ticks: vec![0u8; n].into_boxed_slice(),
+            path: vec![PathSlot::EMPTY; n].into_boxed_slice(),
         }
     }
 
@@ -109,6 +202,7 @@ impl Components {
         self.state[n] = UnitState::Idle;
         self.target[n] = OptionalHandle::NONE;
         self.stuck_ticks[n] = 0;
+        self.path[n].clear();
     }
 
     /// Fold every array, in declared order.
@@ -140,6 +234,9 @@ impl Components {
         for v in &self.stuck_ticks {
             h.write_u8(*v);
         }
+        for v in &self.path {
+            v.hash_into(h);
+        }
     }
 }
 
@@ -169,6 +266,7 @@ pub fn slot_is_clear(c: &Components, i: EntityIndex) -> bool {
         && c.state[n] == UnitState::Idle
         && c.target[n] == OptionalHandle::NONE
         && c.stuck_ticks[n] == 0
+        && c.path[n] == PathSlot::EMPTY
 }
 
 #[cfg(test)]

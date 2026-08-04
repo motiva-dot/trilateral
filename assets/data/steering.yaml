@@ -41,3 +41,16 @@ settle_progress_fraction: 0.25
 # are considered in ascending entity index, so which ones get dropped is
 # deterministic (§6.9) rather than dependent on memory layout.
 max_neighbours: 16
+
+# A* searches started per tick, across all units.
+#
+# A box-select and a right-click can order two hundred units at one instant.
+# Pathing them all in a single tick would blow the frame budget, so the rest
+# wait their turn — served in ascending entity index, so WHICH units go first
+# is a property of the state rather than of timing.
+#
+# At 30Hz, 200 units at 16 per tick clears in 13 ticks: under half a second,
+# and it reads as a group "getting going" rather than teleporting into
+# formation. Raise it if large armies feel sluggish to react; lower it if the
+# pathfinding shows up in the per-tick budget (TECH_SPEC §9: 1.5ms at 1,200).
+max_paths_per_tick: 16

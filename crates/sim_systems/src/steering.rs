@@ -241,7 +241,7 @@ mod tests {
     }
 
     fn ctx_for(state: &SimState, reg: &Registries) -> SimContext {
-        let mut ctx = SimContext::new(128, reg, state.c.capacity());
+        let mut ctx = SimContext::new(128, reg, state.c.capacity(), state.grid.tile_count());
         ctx.spatial.rebuild(state);
         ctx
     }
