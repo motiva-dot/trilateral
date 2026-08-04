@@ -6,3 +6,10 @@ publish.workspace = true
 
 [dependencies]
 serde = { workspace = true }
+
+[features]
+default = []
+# CLAUDE.md §1.1: enabled ONLY by the YAML loader (sim_content, parse time)
+# and by presentation. Never by sim_core or sim_systems. Turning this on for a
+# simulation crate is a governance violation, not a build convenience.
+float_bridge = []
