@@ -1,5 +1,62 @@
 # SESSION_LOG.md
 
+## Session 2026-08-04 (#3) — Phase 1 COMPLETE. The thesis is proven.
+Phase: 1 → complete | Tests added/passing: 80 / 80, debug and release,
+on x86-64 Linux, ARM64 Linux and x86-64 Windows.
+
+**THE GOLDEN HASH AGREED ACROSS THREE ARCHITECTURES: `0x3373a9ec5352e0b7`.**
+Ten thousand mixed fixed-point operations — add, sub, mul, div, sqrt,
+floor/ceil/round/fract, sin, cos, atan2, vector length, normalize, rotate,
+lerp — composed from seed 42 and folded into one FNV-1a value. Same number on
+all three. This is the first evidence on real hardware that the determinism
+thesis holds, and everything built from here inherits it.
+
+Delivered (PR #4): `Fixed` Q32.32 on i64 with i128 widening; `FixedVec2` with
+an i128 `length_sq_wide` that cannot overflow; `FixedAngle` as a wrapping u32
+where a full turn is 2^32; committed 4097-entry quarter-wave sin table;
+32-iteration CORDIC `atan2`; `turn_toward`/`shortest_diff` for Phase 5 facing;
+`float_bridge` behind a feature flag.
+
+Also merged this session: PR #2 (Phase 0 closure docs), PR #3 (v3 build order
+— feel brought forward, economy before combat, Brood Pool into Phase 6).
+
+**Three mistakes worth remembering, all caught by tests I had written:**
+1. A test asserted 100_000^2 fits in Q32.32. It does not — the integer range
+   is +/-2.147e9. Replaced with an explicit range test.
+2. `sqrt`'s maximality postcondition stated via `Fixed::sq` is false at 1 ULP.
+   It belongs in i128, before the `>>32` discards the distinction.
+3. `from_degrees(350)` minus `from_degrees(10)` is one raw unit off
+   `from_degrees(20)`, because 2^32/360 is not an integer. Not a bug — but now
+   a pinned test, so the trap is documented where someone will hit it.
+
+**Design decisions recorded as ADR-003 (tables generated offline, never via
+build.rs) and ADR-004 (the mul/div rounding asymmetry is deliberate).**
+
+**Honest caveat.** `determinism-compare` still compares `headless_sim`'s
+`0xC0FFEE` placeholder — that job proves the artifact plumbing, not the maths.
+The maths is proven by the golden hash running inside `build-test` on all
+three legs. When Phase 2 gives `headless_sim` a real `SimState` to hash, the
+arena becomes the stronger of the two guards; until then the golden hash is.
+
+**Test count note:** 80 test functions. Loop-driven sweeps (4096-angle range
+check, 512-angle Pythagorean identity, 360-degree atan2 round trip) push
+actual cases well past TECH_SPEC's "250+" bar. If that bar meant 250 distinct
+functions, it needs expanding — flagged for the architect rather than padded.
+
+**Still open:** no `LICENSE` on a public repo; alignment session not formally
+run (much of its content was covered in conversation, not recorded here);
+Ledger Open Spec Conflicts #1 (component array sizing) and #2 (vendored hasher
+and RNG) both land in Phase 2 and need deciding before code.
+
+**Next session should:**
+1. Resolve Open Spec Conflict #1 — `[T; MAX_ENTITIES]` const arrays
+   (CLAUDE.md §3.1) vs runtime `Box<[T]>` sized from engine.yaml
+   (TECH_SPEC §3). Decide, write the ADR, update the doc, then build.
+2. Phase 2: EntityAllocator, Components SoA, SimClock, hand-written SimRng
+   and state hasher, snapshot()/hash(), zero-on-free.
+3. Give `headless_sim` a real empty `SimState` to hash so the CI arena stops
+   comparing a placeholder.
+
 ## Session 2026-08-04 (#2) — Phase 0 exit gate MET
 Phase: 0 → complete | Tests added/passing: 0 / 0 (still no code — correct)
 
