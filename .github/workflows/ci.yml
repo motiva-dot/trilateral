@@ -38,7 +38,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - run: ./scripts/ban_floats.sh
+      # Invoked via `bash` rather than `./scripts/...` on purpose: the direct
+      # form depends on the executable bit surviving the trip through git from
+      # a Windows dev machine, where core.filemode is off. It did not, and the
+      # first CI run died here with "Permission denied" (exit 126). The mode is
+      # now 100755 in the index; running it through bash means a future script
+      # added from Windows cannot resurrect this failure. See Ledger gotchas.
+      - run: bash ./scripts/ban_floats.sh
       - name: cargo-deny (sim-crate dependency allowlist + advisories)
         uses: EmbarkStudios/cargo-deny-action@v2
 
