@@ -7,3 +7,9 @@ publish.workspace = true
 [dependencies]
 sim_core = { workspace = true }
 serde = { workspace = true }
+# The float bridge is quarantined HERE (TECH_SPEC §1). This is the only crate
+# permitted to turn the feature on for parsing; see the warning about Cargo
+# feature unification in this crate's lib.rs.
+trilateral_fixed = { workspace = true, features = ["float_bridge"] }
+# ADR-007. Pure Rust, panic-free by design, 1.0, actively maintained.
+serde-saphyr = { version = "1.0.0", default-features = false, features = ["deserialize"] }
