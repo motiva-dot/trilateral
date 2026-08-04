@@ -5,28 +5,35 @@
 //! tick. CI runs this on x86-64 Linux, ARM64 Linux and x86-64 Windows and
 //! requires the three files to be byte-identical.
 //!
-//! # What this proves today, and what it does not
+//! # What this proves, and how it has grown
 //! Through Phase 1 this printed a hardcoded `0xC0FFEE` — enough to prove the
-//! CI plumbing (build, run, upload, compare) but nothing about the engine. It
-//! now folds `Capacities`, `SimClock`, `SimRng`, the `EntityAllocator` free
-//! list, every component array across all slots, and the `CommandLog`.
+//! CI plumbing (build, run, upload, compare) and nothing else. Phase 2 gave it
+//! a real `SimState` to fold: `Capacities`, `SimClock`, `SimRng`, the
+//! `EntityAllocator` free list, every component array, and the `CommandLog`.
 //!
-//! What it does NOT yet prove is that *systems* are deterministic, because
-//! there are no systems: `sim_systems::tick()` arrives in Phase 3. Until then
-//! ticking advances the clock and nothing else, so this is a cross-platform
-//! test of the state store, its hasher, and the fixed-point maths underneath —
-//! not of simulation behaviour. The arena grows with the engine, and
-//! IMPLEMENTATION_PLAN's standing rule is that it is never allowed to shrink.
+//! **Phase 3 is the one that matters.** The arena now runs the real
+//! `sim_systems::tick()` pipeline for 10,000 ticks with units executing move
+//! orders, so the hashes depend on *system behaviour* — command execution
+//! ordering, arrival arithmetic, vector normalisation, spatial reindexing —
+//! and not merely on stored values. This is the first time CI can catch a
+//! system that behaves differently on ARM than on x86.
+//!
+//! Per IMPLEMENTATION_PLAN's standing rule the arena grows with the engine and
+//! is never allowed to shrink.
 
 use std::fmt::Write as _;
 
-use sim_content::capacities_from_yaml;
-use sim_core::{ArchetypeId, Command, IssuedCommand, PlayerId, SimState, Spawn, Tick};
+use sim_content::{capacities_from_yaml, units_from_yaml};
+use sim_core::{Command, IssuedCommand, PlayerId, Registries, SimState, Spawn, Tick};
+use sim_systems::{SimContext, tick};
 use trilateral_fixed::{Fixed, FixedAngle, FixedVec2};
 
-/// The capacities the arena runs at. Read from the committed file rather than
-/// hardcoded, so the arena and the game agree by construction.
+/// Content is read from the committed files rather than hardcoded, so the
+/// arena and the game agree by construction.
 const ENGINE_YAML: &str = include_str!("../../../../assets/data/engine.yaml");
+const UNITS_YAML: &str = include_str!("../../../../assets/data/units.yaml");
+/// Map extent for the spatial hash. PRD §4 puts prototype maps at 128x128.
+const WORLD_TILES: i32 = 128;
 
 /// TECH_SPEC §9: 10,000 ticks, checkpoints every 1,000.
 const ARENA_TICKS: u64 = 10_000;
@@ -43,16 +50,20 @@ fn main() {
         .unwrap_or(ARENA_SEED);
 
     let caps = capacities_from_yaml(ENGINE_YAML).expect("assets/data/engine.yaml must be valid");
+    let reg = Registries {
+        units: units_from_yaml(UNITS_YAML).expect("assets/data/units.yaml must be valid"),
+    };
     let mut state = SimState::new(caps, seed);
-    populate(&mut state);
+    let mut ctx = SimContext::new(WORLD_TILES, &reg);
+    populate(&mut state, &reg);
 
     let mut report = String::new();
-    for tick in 0..=ARENA_TICKS {
-        if tick.is_multiple_of(CHECKPOINT_EVERY) {
-            writeln!(report, "{tick}:{:016x}", state.hash()).expect("write to String");
+    for t in 0..=ARENA_TICKS {
+        if t.is_multiple_of(CHECKPOINT_EVERY) {
+            writeln!(report, "{t}:{:016x}", state.hash()).expect("write to String");
         }
-        if tick < ARENA_TICKS {
-            state.clock.advance();
+        if t < ARENA_TICKS {
+            tick(&mut state, &reg, &mut ctx);
         }
     }
 
@@ -72,16 +83,28 @@ fn arg_value(args: &[String], flag: &str) -> Option<String> {
 /// Uses fixed-point positions, angles, and a spread of owners and archetypes,
 /// so the hash exercises every component array rather than folding a field of
 /// zeroes and calling it agreement.
-fn populate(state: &mut SimState) {
+fn populate(state: &mut SimState, reg: &Registries) {
+    // Real archetypes from units.yaml, so the arena exercises the actual
+    // move_speed values the game will use rather than invented ones.
+    let roster: Vec<u16> = ["mur_drone", "mur_mite", "mur_lasher", "mur_supply_sac"]
+        .iter()
+        .map(|id| {
+            reg.units
+                .index_of(id)
+                .unwrap_or_else(|| panic!("units.yaml is missing {id}")) as u16
+        })
+        .collect();
+
     let mut handles = Vec::with_capacity(ARENA_UNITS as usize);
     for i in 0..ARENA_UNITS {
+        let archetype = sim_core::ArchetypeId(roster[(i as usize) % roster.len()]);
         let h = state
             .spawn(Spawn {
-                archetype: ArchetypeId((i % 23) as u16),
+                archetype,
                 owner: PlayerId((i % 3) as u8),
                 pos: FixedVec2::new(
-                    Fixed::from_ratio(i as i64, 7),
-                    Fixed::from_ratio((i * 3) as i64, 11),
+                    Fixed::from_ratio((i % 60) as i64, 1) + Fixed::from_ratio(i as i64, 7),
+                    Fixed::from_ratio((i / 60) as i64, 1) + Fixed::from_ratio(i as i64, 11),
                 ),
                 hp: 40 + (i % 13) * 5,
             })
@@ -90,10 +113,6 @@ fn populate(state: &mut SimState) {
 
         let idx = h.index as usize;
         state.c.facing[idx] = FixedAngle::from_bits((i as u32).wrapping_mul(7_919) << 12);
-        state.c.vel[idx] = FixedVec2::new(
-            Fixed::from_ratio((i % 5) as i64 - 2, 30),
-            Fixed::from_ratio((i % 7) as i64 - 3, 30),
-        );
         state.c.shields[idx] = (i % 4) * 25;
     }
 
@@ -103,17 +122,21 @@ fn populate(state: &mut SimState) {
         state.despawn(handles[i]);
     }
 
-    // Ingest a mix of commands. Some subjects are now dead, so the reject path
-    // and the rejection counter get exercised too — both are hashed state.
-    for (n, h) in handles.iter().enumerate().take(120) {
+    // Move orders spread across the first 30 ticks, at destinations far enough
+    // away that units are still travelling at the last checkpoint. Some
+    // subjects are already dead, so the reject path and the rejection counter
+    // get exercised too — both are hashed state.
+    for (n, h) in handles.iter().enumerate() {
         let cmd = match n % 4 {
             0 => Command::Move {
-                target: FixedVec2::from_ints((n % 50) as i32, (n % 31) as i32),
+                target: FixedVec2::from_ints(100 - (n % 40) as i32, 100 - (n % 27) as i32),
             },
-            1 => Command::Stop,
-            2 => Command::HoldPosition,
-            _ => Command::AttackMove {
-                target: FixedVec2::from_ints((n % 17) as i32, (n % 19) as i32),
+            1 => Command::Move {
+                target: FixedVec2::from_ints((n % 23) as i32, 110 - (n % 31) as i32),
+            },
+            2 => Command::Stop,
+            _ => Command::Move {
+                target: FixedVec2::from_ints(115 - (n % 19) as i32, (n % 17) as i32),
             },
         };
         let _ = state.ingest(IssuedCommand {

@@ -1,62 +1,32 @@
-//! `units.yaml` → `UnitRegistry`. CLAUDE.md §1.8, GAME_DESIGN §2.
+//! `units.yaml` → `sim_core::UnitRegistry`. CLAUDE.md §1.8, GAME_DESIGN §2.
+//!
+//! # Parse-time types here, runtime types in `sim_core`
+//! The `Raw*` structs below are the YAML spelling: `f64` fields, serde
+//! attributes, optional everything. They convert once, at load, into the
+//! runtime `UnitStats` that `sim_systems` compiles against. See
+//! `sim_core::registry` for why the split exists.
 //!
 //! # Where the float bridge is allowed to be
 //! Authored values like `move_speed: 0.1362` are decimals because that is what
-//! a human tuning a game writes. They cross into `Fixed` exactly once, here,
-//! at load. After that the simulation never sees a float. TECH_SPEC §1 calls
-//! this the quarantine; see `lib.rs` for why Cargo features make it a
-//! convention rather than a wall.
+//! a human tuning a game writes. They cross into `Fixed` exactly once, here.
+//! After that the simulation never sees a float.
 //!
 //! # Registry index is `ArchetypeId` is gameplay
 //! An entity's only link to its stats is its `ArchetypeId`, which is its index
-//! here. So index assignment must be a pure function of the file: sorted by
-//! faction key, then authored order within a faction. Two clients that
-//! assigned indices differently would disagree about what every unit on the
-//! map *is*.
+//! in the registry. Index assignment must therefore be a pure function of the
+//! file: sorted by faction key, then authored order within a faction. Two
+//! clients that assigned indices differently would disagree about what every
+//! unit on the map *is*.
 
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
+use sim_core::registry::{
+    AttackStats, ResourceNode, Role, Shape, UnitCost, UnitRegistry, UnitStats,
+};
 use trilateral_fixed::Fixed;
 
 use crate::tech::ContentError;
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Role {
-    Worker,
-    Melee,
-    Ranged,
-    Supply,
-    Resource,
-}
-
-/// Visual and collision shape. PRD §3 ties these together deliberately: the
-/// silhouette a player reads is the collider the simulation uses.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Shape {
-    Circle,
-    Aabb,
-    Triangle,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ResourceKind {
-    Ore,
-    Flux,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct UnitCost {
-    #[serde(default)]
-    pub ore: u32,
-    #[serde(default)]
-    pub flux: u32,
-    pub ticks: u32,
-}
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -69,26 +39,6 @@ pub struct RawAttack {
     /// Fraction of a full turn the target must be within before frontswing may
     /// begin (TECH_SPEC §5.3).
     pub arc: f64,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Attack {
-    pub damage: i32,
-    pub range: Fixed,
-    pub cooldown_ticks: u32,
-    pub frontswing_ticks: u32,
-    pub backswing_ticks: u32,
-    pub arc: Fixed,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ResourceNode {
-    pub kind: ResourceKind,
-    pub amount: u32,
-    pub harvest_slots: u8,
-    pub per_trip: u32,
-    pub trip_ticks: u32,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -117,129 +67,68 @@ pub struct RawUnit {
     pub tags: Vec<String>,
 }
 
-#[derive(Clone, Debug)]
-pub struct Unit {
-    pub id: String,
-    pub faction: String,
-    pub role: Role,
-    pub shape: Shape,
-    pub cost: UnitCost,
-    pub supply_x2: u16,
-    pub provides_supply_x2: u16,
-    pub hp: i32,
-    pub armor: i32,
-    /// Tiles.
-    pub collider_radius: Fixed,
-    /// Integer priority for shoving (TECH_SPEC §5.2 — heavier shoves lighter).
-    pub mass: u16,
-    /// Tiles per tick.
-    pub move_speed: Fixed,
-    /// Fraction of a full turn per tick.
-    pub turn_rate: Fixed,
-    pub sight_range: Fixed,
-    pub selection_weight: u16,
-    pub attack: Option<Attack>,
-    pub resource: Option<ResourceNode>,
-    pub tags: Vec<String>,
-}
-
 pub type RawUnitFile = BTreeMap<String, Vec<RawUnit>>;
 
-#[derive(Clone, Debug, Default)]
-pub struct UnitRegistry {
-    units: Vec<Unit>,
-    by_id: BTreeMap<String, usize>,
+/// Parse, validate, and convert to the runtime registry.
+pub fn units_from_yaml(src: &str) -> Result<UnitRegistry, ContentError> {
+    let raw: RawUnitFile =
+        serde_saphyr::from_str(src).map_err(|e| ContentError::Parse(e.to_string()))?;
+    units_from_raw(raw)
 }
 
-impl UnitRegistry {
-    pub fn from_yaml(src: &str) -> Result<UnitRegistry, ContentError> {
-        let raw: RawUnitFile =
-            serde_saphyr::from_str(src).map_err(|e| ContentError::Parse(e.to_string()))?;
-        UnitRegistry::from_raw(raw)
-    }
+pub fn units_from_raw(raw: RawUnitFile) -> Result<UnitRegistry, ContentError> {
+    let mut units: Vec<UnitStats> = Vec::new();
+    let mut seen: BTreeMap<&str, ()> = BTreeMap::new();
 
-    pub fn from_raw(raw: RawUnitFile) -> Result<UnitRegistry, ContentError> {
-        let mut units = Vec::new();
-        let mut by_id: BTreeMap<String, usize> = BTreeMap::new();
-
-        for (faction, entries) in &raw {
-            for u in entries {
-                if by_id.contains_key(&u.id) {
-                    return Err(ContentError::DuplicateId(u.id.clone()));
-                }
-                validate(u)?;
-                by_id.insert(u.id.clone(), units.len());
-                units.push(Unit {
-                    id: u.id.clone(),
-                    faction: faction.clone(),
-                    role: u.role,
-                    shape: u.shape,
-                    cost: u.cost,
-                    supply_x2: u.supply_x2,
-                    provides_supply_x2: u.provides_supply_x2,
-                    hp: u.hp,
-                    armor: u.armor,
-                    collider_radius: Fixed::from_f64(u.collider_radius),
-                    mass: u.mass,
-                    move_speed: Fixed::from_f64(u.move_speed),
-                    turn_rate: Fixed::from_f64(u.turn_rate),
-                    sight_range: Fixed::from_f64(u.sight_range),
-                    selection_weight: u.selection_weight,
-                    attack: u.attack.map(|a| Attack {
-                        damage: a.damage,
-                        range: Fixed::from_f64(a.range),
-                        cooldown_ticks: a.cooldown_ticks,
-                        frontswing_ticks: a.frontswing_ticks,
-                        backswing_ticks: a.backswing_ticks,
-                        arc: Fixed::from_f64(a.arc),
-                    }),
-                    resource: u.resource,
-                    tags: u.tags.clone(),
-                });
+    // BTreeMap iteration is sorted by faction, so index assignment is a pure
+    // function of the file contents rather than of insertion order.
+    for (faction, entries) in &raw {
+        for u in entries {
+            if seen.insert(u.id.as_str(), ()).is_some() {
+                return Err(ContentError::DuplicateId(u.id.clone()));
             }
+            validate(u)?;
+            units.push(UnitStats {
+                id: u.id.clone(),
+                faction: faction.clone(),
+                role: u.role,
+                shape: u.shape,
+                cost: u.cost,
+                supply_x2: u.supply_x2,
+                provides_supply_x2: u.provides_supply_x2,
+                hp: u.hp,
+                armor: u.armor,
+                collider_radius: Fixed::from_f64(u.collider_radius),
+                mass: u.mass,
+                move_speed: Fixed::from_f64(u.move_speed),
+                turn_rate: Fixed::from_f64(u.turn_rate),
+                sight_range: Fixed::from_f64(u.sight_range),
+                selection_weight: u.selection_weight,
+                attack: u.attack.map(|a| AttackStats {
+                    damage: a.damage,
+                    range: Fixed::from_f64(a.range),
+                    cooldown_ticks: a.cooldown_ticks,
+                    frontswing_ticks: a.frontswing_ticks,
+                    backswing_ticks: a.backswing_ticks,
+                    arc: Fixed::from_f64(a.arc),
+                }),
+                resource: u.resource,
+                tags: u.tags.clone(),
+            });
         }
-        if units.is_empty() {
-            return Err(ContentError::Empty);
-        }
-        Ok(UnitRegistry { units, by_id })
     }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.units.len()
+    if units.is_empty() {
+        return Err(ContentError::Empty);
     }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.units.is_empty()
-    }
-
-    #[inline]
-    pub fn get(&self, id: &str) -> Option<&Unit> {
-        self.by_id.get(id).map(|&i| &self.units[i])
-    }
-
-    /// By `ArchetypeId`. This is the lookup the simulation performs.
-    #[inline]
-    pub fn by_index(&self, i: usize) -> Option<&Unit> {
-        self.units.get(i)
-    }
-
-    #[inline]
-    pub fn index_of(&self, id: &str) -> Option<usize> {
-        self.by_id.get(id).copied()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &Unit> {
-        self.units.iter()
-    }
+    Ok(UnitRegistry::new(units))
 }
 
 /// Reject values that are nonsense before they reach the simulation.
 ///
 /// Every one of these has a failure mode worse than an error message: zero HP
-/// spawns a corpse, a negative radius inverts collision, an attack with a
-/// zero cooldown fires every tick forever.
+/// spawns a corpse, a negative radius inverts collision, a zero cooldown fires
+/// every tick forever, and a swing longer than the cooldown means the attack
+/// FSM can never return to ready.
 fn validate(u: &RawUnit) -> Result<(), ContentError> {
     let bad = |reason: &str| ContentError::BadEffect {
         tech: u.id.clone(),
@@ -280,19 +169,20 @@ fn validate(u: &RawUnit) -> Result<(), ContentError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sim_core::registry::ResourceKind;
 
     const REAL_UNITS: &str = include_str!("../../../assets/data/units.yaml");
 
     #[test]
     fn the_real_units_file_loads() {
-        let reg = UnitRegistry::from_yaml(REAL_UNITS)
+        let reg = units_from_yaml(REAL_UNITS)
             .unwrap_or_else(|e| panic!("assets/data/units.yaml failed: {e}"));
         assert!(reg.len() >= 6, "only {} units loaded", reg.len());
     }
 
     #[test]
     fn brood_war_derived_stats_survive_the_conversion() {
-        let reg = UnitRegistry::from_yaml(REAL_UNITS).unwrap();
+        let reg = units_from_yaml(REAL_UNITS).unwrap();
 
         // BW Drone: 40 HP, 5 damage, cooldown 22 frames, 50 minerals.
         // 22 frames * (30/23.81) = 27.7 -> 28 ticks.
@@ -323,7 +213,7 @@ mod tests {
     #[test]
     fn supply_is_stored_doubled_everywhere() {
         // Audit item 29: `supply: 0.5` cannot exist in an integer simulation.
-        let reg = UnitRegistry::from_yaml(REAL_UNITS).unwrap();
+        let reg = units_from_yaml(REAL_UNITS).unwrap();
         assert_eq!(reg.get("mur_mite").unwrap().supply_x2, 1); // 0.5 displayed
         assert_eq!(reg.get("mur_drone").unwrap().supply_x2, 2); // 1.0 displayed
         // BW Overlord provides 8 supply.
@@ -332,7 +222,7 @@ mod tests {
 
     #[test]
     fn decimals_reach_fixed_point_exactly_as_authored() {
-        let reg = UnitRegistry::from_yaml(REAL_UNITS).unwrap();
+        let reg = units_from_yaml(REAL_UNITS).unwrap();
         // 0.1362 tiles/tick, rounded to nearest Q32.32. Written in hex
         // deliberately: the decimal form invites recomputing it by hand, and
         // hand arithmetic is how a wrong "expected" value gets committed.
@@ -345,7 +235,7 @@ mod tests {
 
     #[test]
     fn resource_nodes_are_neutral_and_carry_harvest_data() {
-        let reg = UnitRegistry::from_yaml(REAL_UNITS).unwrap();
+        let reg = units_from_yaml(REAL_UNITS).unwrap();
         let ore = reg.get("ore_node").unwrap();
         assert_eq!(ore.faction, "neutral");
         let r = ore.resource.unwrap();
@@ -362,8 +252,8 @@ mod tests {
         // The index IS the ArchetypeId, and the ArchetypeId is an entity's only
         // link to its stats. Two clients disagreeing here disagree about what
         // every unit on the map is.
-        let a = UnitRegistry::from_yaml(REAL_UNITS).unwrap();
-        let b = UnitRegistry::from_yaml(REAL_UNITS).unwrap();
+        let a = units_from_yaml(REAL_UNITS).unwrap();
+        let b = units_from_yaml(REAL_UNITS).unwrap();
         let ids_a: Vec<&str> = a.iter().map(|u| u.id.as_str()).collect();
         let ids_b: Vec<&str> = b.iter().map(|u| u.id.as_str()).collect();
         assert_eq!(ids_a, ids_b);
@@ -372,9 +262,7 @@ mod tests {
 
     #[test]
     fn every_combat_unit_can_actually_complete_an_attack() {
-        // frontswing + backswing must fit inside the cooldown or the FSM never
-        // returns to ready. Checked at load, asserted here against real content.
-        let reg = UnitRegistry::from_yaml(REAL_UNITS).unwrap();
+        let reg = units_from_yaml(REAL_UNITS).unwrap();
         for u in reg.iter() {
             if let Some(a) = u.attack {
                 assert!(
@@ -384,6 +272,18 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_spatial_hash_cell_size_source_is_sane() {
+        // TECH_SPEC §4 sizes spatial cells from the largest collider.
+        let reg = units_from_yaml(REAL_UNITS).unwrap();
+        let max = reg.max_collider_radius();
+        assert!(max > Fixed::ZERO);
+        assert!(
+            max <= Fixed::from_int(2),
+            "collider radius unexpectedly large"
+        );
     }
 
     // ---- malformed content ------------------------------------------------
@@ -411,7 +311,7 @@ mod tests {
     #[test]
     fn a_unit_with_no_hp_is_rejected() {
         let src = minimal("").replace("hp: 10", "hp: 0");
-        assert!(UnitRegistry::from_yaml(&src).is_err());
+        assert!(units_from_yaml(&src).is_err());
     }
 
     #[test]
@@ -419,7 +319,7 @@ mod tests {
         let src = minimal(
             "    attack: { damage: 1, range: 1.0, cooldown_ticks: 0, frontswing_ticks: 0, backswing_ticks: 0, arc: 0.25 }\n",
         );
-        let err = UnitRegistry::from_yaml(&src).unwrap_err().to_string();
+        let err = units_from_yaml(&src).unwrap_err().to_string();
         assert!(err.contains("cooldown_ticks"), "{err}");
     }
 
@@ -428,32 +328,20 @@ mod tests {
         let src = minimal(
             "    attack: { damage: 1, range: 1.0, cooldown_ticks: 5, frontswing_ticks: 4, backswing_ticks: 4, arc: 0.25 }\n",
         );
-        let err = UnitRegistry::from_yaml(&src).unwrap_err().to_string();
+        let err = units_from_yaml(&src).unwrap_err().to_string();
         assert!(err.contains("exceeds cooldown"), "{err}");
     }
 
     #[test]
     fn a_negative_radius_is_rejected() {
         let src = minimal("").replace("collider_radius: 0.5", "collider_radius: -1.0");
-        assert!(UnitRegistry::from_yaml(&src).is_err());
-    }
-
-    #[test]
-    fn duplicate_ids_are_rejected() {
-        let src = format!("{}{}", minimal(""), minimal("").replace("murmur:\n", ""));
-        assert!(matches!(
-            UnitRegistry::from_yaml(&src),
-            Err(ContentError::DuplicateId(_)) | Err(ContentError::Parse(_))
-        ));
+        assert!(units_from_yaml(&src).is_err());
     }
 
     #[test]
     fn garbage_errors_and_does_not_panic() {
         for src in ["", "{}", "murmur: []", "- - -", "\u{0}", "murmur: [1,2,3]"] {
-            assert!(
-                UnitRegistry::from_yaml(src).is_err(),
-                "expected error: {src:?}"
-            );
+            assert!(units_from_yaml(src).is_err(), "expected error: {src:?}");
         }
     }
 }

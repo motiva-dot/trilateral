@@ -6,3 +6,4 @@ publish.workspace = true
 
 [dependencies]
 sim_core = { workspace = true }
+trilateral_fixed.workspace = true
