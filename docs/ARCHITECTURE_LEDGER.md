@@ -261,8 +261,22 @@ persist — 0.008 pixels at normal zoom.
 generalised. Only testing the number the plan specified exposed that the
 property did not scale.
 
-### ADR-012 — HPA* and flow fields deferred pending the bench
-**Date:** 2026-08-04 · **OPEN ITEM, not a cancellation.**
+### ADR-012 — HPA* and flow fields NOT NEEDED at prototype scale
+**Date:** 2026-08-04 · **RESOLVED by measurement, same day.**
+**Resolution:** the bench answered it. Pathfinding costs **0.002 ms per tick**
+at 1,200 entities against a 1.5 ms budget — **0.2% used**. Tile A* with a
+16-search-per-tick cap is nowhere near its ceiling, so HPA* over 16x16 chunks
+and an LRU flow-field cache would be speculative work on a problem that does
+not exist, and both add invalidation logic that can desync. They are not built
+and should not be built until a measurement says otherwise.
+**TECH_SPEC §4 now overstates what is required** and should be amended to say
+tile A* plus a per-tick budget suffices at prototype scale, with HPA* named as
+a contingency rather than a requirement. Flagged, not silently diverged.
+**The real hot spot is elsewhere:** steering is at 89% of its budget, almost
+entirely from the three relaxation passes that fixed "mushy". Measured at
+0.857 / 1.359 / 2.166 ms for 1/2/3 passes. See benches/baselines.toml.
+
+**Original reasoning, kept:**
 **Decision:** Phase 4 ships with tile A* plus a per-tick search budget. HPA*
 over 16×16 chunks and integration flow fields are not built yet.
 **Context:** TECH_SPEC §4 specifies both. At 128×128 with 16 searches per tick,
