@@ -23,7 +23,9 @@
 
 #![forbid(unsafe_code)]
 
+pub mod economy;
 pub mod movement;
+pub mod occupancy;
 pub mod path;
 pub mod pathing;
 pub mod spatial;
@@ -59,6 +61,10 @@ pub struct SimContext {
     /// paid once per tick rather than once per relaxation pass.
     pub neighbour_start: Vec<u32>,
     pub neighbour_data: Vec<u32>,
+    /// Slots taken at each node this tick, rebuilt from scratch.
+    pub node_used: Vec<u8>,
+    /// Whether each worker currently holds a slot rather than queuing.
+    pub slot_holder: Vec<bool>,
     /// A* buffers, sized to the map once (§1.4).
     pub path_scratch: crate::path::PathScratch,
     /// Reused by the pathfinder for one search.s output.
@@ -86,6 +92,8 @@ impl SimContext {
             queued: vec![false; capacity as usize],
             neighbour_start: Vec::with_capacity(capacity as usize + 1),
             neighbour_data: Vec::with_capacity(capacity as usize * 8),
+            node_used: vec![0u8; capacity as usize],
+            slot_holder: vec![false; capacity as usize],
             path_scratch: crate::path::PathScratch::new(tile_count),
             path_out: Vec::with_capacity(256),
             path_indices: Vec::with_capacity(64),
@@ -110,7 +118,8 @@ pub fn tick(state: &mut SimState, reg: &Registries, ctx: &mut SimContext) {
     //  8. death_cleanup       — Phase 5
     //  9. modifier_pipeline   — Phase 7
     // 10. production_tick     — Phase 6
-    // 11. economy_tick        — Phase 6
+    // 11. economy_tick — the harvest loop.
+    economy::economy(state, reg, ctx);
     // 12. pathfinding — hand routes to movers that need one.
     pathing::pathfinding(state, reg, ctx);
     // 13. steering — local separation into ctx.separation.
@@ -181,6 +190,7 @@ mod tests {
             owner: PlayerId(0),
             pos: FixedVec2::from_ints(3, 3),
             hp: 10,
+            resource: 0,
         })
         .unwrap();
         tick(&mut s, &reg, &mut ctx);

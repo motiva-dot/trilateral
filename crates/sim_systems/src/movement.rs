@@ -52,6 +52,17 @@ pub fn command_execution(state: &mut SimState, _reg: &Registries) {
                 state.c.path[i].clear();
                 state.c.stuck_ticks[i] = 0;
             }
+            Command::Harvest { node } => {
+                // Validated at ingest (the node was alive then), but that was
+                // up to input_delay ticks ago.
+                if state.is_alive(node) {
+                    state.c.harvest_target[i] = sim_core::OptionalHandle::some(node);
+                    state.c.harvest_ticks[i] = 0;
+                    state.c.dest[i] = state.c.pos[node.index as usize];
+                    state.c.state[i] = UnitState::Harvesting;
+                    state.c.path[i].clear();
+                }
+            }
             Command::Stop | Command::HoldPosition => {
                 state.c.dest[i] = FixedVec2::ZERO;
                 state.c.vel[i] = FixedVec2::ZERO;
@@ -60,6 +71,11 @@ pub fn command_execution(state: &mut SimState, _reg: &Registries) {
                 // old waypoints and resumes the moment anything sets it
                 // Moving again — a Stop that does not stop.
                 state.c.path[i].clear();
+                // Stop cancels harvesting outright. A worker told to stop
+                // that silently resumed mining would be a Stop that does not
+                // stop, in the same way the route was.
+                state.c.harvest_target[i] = sim_core::OptionalHandle::NONE;
+                state.c.harvest_ticks[i] = 0;
             }
             // Every other variant belongs to a system that does not exist yet.
             // Deliberately ignored rather than partially implemented: a command
@@ -81,7 +97,11 @@ pub fn movement(state: &mut SimState, reg: &Registries, ctx: &crate::SimContext)
         let n = i as usize;
         let sep = ctx.separation[n];
 
-        if state.c.state[n] != UnitState::Moving {
+        let travelling = matches!(
+            state.c.state[n],
+            UnitState::Moving | UnitState::Harvesting | UnitState::ReturningCargo
+        );
+        if !travelling {
             // Idle units are still displaced by their neighbours. Without
             // this, a mover would tunnel through a standing crowd instead of
             // parting it, and a crowd would never spread out at all.
@@ -134,7 +154,11 @@ pub fn movement(state: &mut SimState, reg: &Registries, ctx: &crate::SimContext)
                 // point would stack perfectly on top of each other.
                 state.c.pos[n] = target + sep;
                 state.c.vel[n] = FixedVec2::ZERO;
-                state.c.state[n] = UnitState::Idle;
+                // A harvester that arrives has not finished — it has started.
+                // Only a plain Move ends in Idle; economy owns the other two.
+                if state.c.state[n] == UnitState::Moving {
+                    state.c.state[n] = UnitState::Idle;
+                }
                 state.c.dest[n] = FixedVec2::ZERO;
                 state.c.stuck_ticks[n] = 0;
                 state.c.path[n].clear();
@@ -166,7 +190,9 @@ pub fn movement(state: &mut SimState, reg: &Registries, ctx: &crate::SimContext)
             remaining - after
         };
         let queued = ctx.queued[n];
-        if crate::steering::update_settle(state, reg, i, progress, speed, queued) {
+        if state.c.state[n] == UnitState::Moving
+            && crate::steering::update_settle(state, reg, i, progress, speed, queued)
+        {
             state.c.state[n] = UnitState::Idle;
             state.c.dest[n] = FixedVec2::ZERO;
             state.c.vel[n] = FixedVec2::ZERO;
@@ -233,6 +259,7 @@ mod tests {
             owner: PlayerId(0),
             pos: FixedVec2::from_ints(x, y),
             hp: 10,
+            resource: 0,
         })
         .unwrap()
     }
@@ -412,6 +439,7 @@ mod tests {
                 owner: PlayerId(0),
                 pos: FixedVec2::ZERO,
                 hp: 10,
+                resource: 0,
             })
             .unwrap();
         order_move(&mut s, h, Tick(0), 100, 0);

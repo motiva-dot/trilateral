@@ -183,3 +183,27 @@ neutral:
       per_trip: 4
       trip_ticks: 75
     tags: [neutral, resource, static]
+
+# =============================================================================
+# BASE. Lives here rather than in buildings.yaml for now: the harvest loop
+# needs somewhere to deposit, and buildings.yaml arrives with placement
+# validation and construction. When it does, this entry moves there.
+#
+# BW Hatchery: 1250 HP, 300 minerals, 120s build, provides 1 supply.
+# =============================================================================
+base:
+  - id: mur_nest
+    role: base
+    shape: circle
+    cost: { ore: 300, flux: 0, ticks: 3600 }
+    supply_x2: 0
+    provides_supply_x2: 2
+    hp: 1250
+    armor: 0
+    collider_radius: 2.0
+    mass: 255
+    move_speed: 0.0
+    turn_rate: 0.0
+    sight_range: 9.0
+    selection_weight: 2
+    tags: [building, base, ground]

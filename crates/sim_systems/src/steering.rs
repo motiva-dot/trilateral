@@ -104,6 +104,14 @@ fn resolve_pass(state: &SimState, reg: &Registries, ctx: &mut SimContext, mark_q
         if !state.c.alive.get(i) {
             continue;
         }
+        // Static things — bases, resource nodes, buildings — are GRID
+        // OCCUPANCY, not colliders (TECH_SPEC §4). Letting them participate
+        // in separation makes a mass-255 object an invisible obstacle that
+        // the pathfinder routes straight through and then shoves units out
+        // of, forever. They block tiles instead, and paths go around.
+        if is_static(state, reg, i) {
+            continue;
+        }
         let ri = radius_of(state, reg, i);
         if ri <= Fixed::ZERO {
             continue;
@@ -129,6 +137,9 @@ fn resolve_pass(state: &SimState, reg: &Registries, ctx: &mut SimContext, mark_q
                 break;
             }
             if !state.c.alive.get(j) {
+                continue;
+            }
+            if is_static(state, reg, j) {
                 continue;
             }
             let rj = radius_of(state, reg, j);
@@ -207,6 +218,17 @@ fn resolve_pass(state: &SimState, reg: &Registries, ctx: &mut SimContext, mark_q
     for (s, d) in ctx.separation.iter_mut().zip(ctx.sep_delta.iter()) {
         *s += *d;
     }
+}
+
+/// Anything that cannot move is static: it occupies tiles rather than
+/// colliding. Derived from `move_speed` rather than from a role list, so a
+/// future immobile unit is handled without anyone remembering to add it.
+#[inline]
+fn is_static(state: &SimState, reg: &Registries, i: u32) -> bool {
+    reg.units
+        .by_archetype(state.c.archetype[i as usize])
+        .map(|u| u.move_speed <= Fixed::ZERO)
+        .unwrap_or(false)
 }
 
 #[inline]
@@ -359,6 +381,7 @@ mod tests {
             owner: PlayerId(0),
             pos: FixedVec2::new(Fixed::from_ratio(x, denom), Fixed::from_ratio(y, denom)),
             hp: 10,
+            resource: 0,
         })
         .unwrap();
     }

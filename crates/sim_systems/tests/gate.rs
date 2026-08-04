@@ -75,6 +75,7 @@ fn spawn(s: &mut SimState, x: i32, y: i32) -> EntityHandle {
         owner: PlayerId(0),
         pos: centre_of(x, y),
         hp: 10,
+        resource: 0,
     })
     .unwrap()
 }

@@ -241,6 +241,7 @@ mod tests {
             owner: PlayerId(owner),
             pos: FixedVec2::from_ints(x, y),
             hp: 10,
+            resource: 0,
         })
         .unwrap();
     }

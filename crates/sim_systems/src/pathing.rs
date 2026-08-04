@@ -40,7 +40,18 @@ pub fn pathfinding(state: &mut SimState, reg: &Registries, ctx: &mut SimContext)
             continue;
         }
         let n = i as usize;
-        if state.c.state[n] != UnitState::Moving || !state.c.path[n].is_empty() {
+        // Harvesters and returners travel too — the pathfinder serves any
+        // state that is trying to be somewhere else, not just a plain Move.
+        let travelling = matches!(
+            state.c.state[n],
+            UnitState::Moving | UnitState::Harvesting | UnitState::ReturningCargo
+        );
+        if !travelling || !state.c.path[n].is_empty() {
+            continue;
+        }
+        // A cleared destination means "arrived, nothing to walk to". Without
+        // this a harvester standing at its node would re-path every tick.
+        if state.c.dest[n] == trilateral_fixed::FixedVec2::ZERO {
             continue;
         }
         // A unit that cannot move cannot use a path.
@@ -55,8 +66,23 @@ pub fn pathfinding(state: &mut SimState, reg: &Registries, ctx: &mut SimContext)
         }
 
         served += 1;
-        let from = state.grid.tile_at(state.c.pos[n]);
-        let to = state.grid.tile_at(state.c.dest[n]);
+        // EGRESS. A unit can legitimately be standing inside blocked tiles: it
+        // spawned in a base.s footprint, or a building went up on top of it.
+        // Pathing from a sealed tile finds nothing, so the unit would be
+        // entombed forever. Start the search from the nearest tile it could
+        // stand on instead — statics are occupancy, not collision, so it can
+        // physically walk out.
+        let here = state.grid.tile_at(state.c.pos[n]);
+        let from = crate::path::nearest_walkable(&state.grid, here, 4).unwrap_or(here);
+        // Walk as close as possible to a blocked destination rather than
+        // refusing the order: harvest targets and buildings both occupy tiles.
+        let Some(to) =
+            crate::path::nearest_walkable(&state.grid, state.grid.tile_at(state.c.dest[n]), 4)
+        else {
+            state.c.state[n] = UnitState::Idle;
+            state.c.dest[n] = trilateral_fixed::FixedVec2::ZERO;
+            continue;
+        };
 
         if from == to {
             // Already in the destination tile — walk straight at the exact
@@ -161,6 +187,7 @@ mod tests {
                 Fixed::from_int(y) + Fixed::HALF,
             ),
             hp: 10,
+            resource: 0,
         })
         .unwrap()
     }
