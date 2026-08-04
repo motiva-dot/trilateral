@@ -193,6 +193,7 @@ fn build() -> (SimState, Registries, SimContext) {
                     Fixed::from_int(4 + row) + Fixed::HALF,
                 ),
                 hp: 40,
+                resource: 0,
             })
             .expect("engine.yaml max_entities must exceed the bench size");
         handles.push(h);

@@ -35,6 +35,10 @@ pub enum Role {
     Ranged,
     Supply,
     Resource,
+    /// Townhall. Workers deposit here, and it is what a player loses when a
+    /// base dies — GAME_DESIGN §2.1 makes that cost Murmur its production
+    /// capacity, not just its buildings.
+    Base,
 }
 
 /// Visual and collision shape. PRD §3 ties these together deliberately: the

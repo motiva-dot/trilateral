@@ -131,6 +131,7 @@ fn populate(state: &mut SimState, reg: &Registries) {
                 owner: PlayerId(player),
                 pos,
                 hp: 40,
+                resource: 0,
             })
             .expect("engine.yaml max_entities must exceed the demo size");
     }

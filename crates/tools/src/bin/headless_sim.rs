@@ -115,6 +115,7 @@ fn populate(state: &mut SimState, reg: &Registries) {
                     Fixed::from_ratio((i / 60) as i64, 1) + Fixed::from_ratio(i as i64, 11),
                 ),
                 hp: 40 + (i % 13) * 5,
+                resource: 0,
             })
             .expect("engine.yaml max_entities must exceed the arena size");
         handles.push(h);

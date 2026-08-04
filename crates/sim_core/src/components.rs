@@ -153,6 +153,15 @@ pub struct Components {
     /// Remaining route. Empty while Idle, or while a mover is waiting for
     /// the pathfinder to reach it within this tick.s budget.
     pub path: Box<[PathSlot]>,
+    /// Resource remaining in a node. Meaningless for non-resource entities.
+    pub resource_left: Box<[u32]>,
+    /// What a worker is currently carrying.
+    pub cargo: Box<[u32]>,
+    /// The node a worker is assigned to. Survives a round trip to the base,
+    /// which is what makes harvesting a loop rather than a single errand.
+    pub harvest_target: Box<[OptionalHandle]>,
+    /// Ticks spent mining at the node this trip.
+    pub harvest_ticks: Box<[u32]>,
 }
 
 impl Components {
@@ -175,6 +184,10 @@ impl Components {
             target: vec![OptionalHandle::NONE; n].into_boxed_slice(),
             stuck_ticks: vec![0u8; n].into_boxed_slice(),
             path: vec![PathSlot::EMPTY; n].into_boxed_slice(),
+            resource_left: vec![0u32; n].into_boxed_slice(),
+            cargo: vec![0u32; n].into_boxed_slice(),
+            harvest_target: vec![OptionalHandle::NONE; n].into_boxed_slice(),
+            harvest_ticks: vec![0u32; n].into_boxed_slice(),
         }
     }
 
@@ -203,6 +216,10 @@ impl Components {
         self.target[n] = OptionalHandle::NONE;
         self.stuck_ticks[n] = 0;
         self.path[n].clear();
+        self.resource_left[n] = 0;
+        self.cargo[n] = 0;
+        self.harvest_target[n] = OptionalHandle::NONE;
+        self.harvest_ticks[n] = 0;
     }
 
     /// Fold every array, in declared order.
@@ -237,6 +254,14 @@ impl Components {
         for v in &self.path {
             v.hash_into(h);
         }
+        h.write_u32_slice(&self.resource_left);
+        h.write_u32_slice(&self.cargo);
+        for v in &self.harvest_target {
+            let (i, g) = v.raw();
+            h.write_u32(i);
+            h.write_u32(g);
+        }
+        h.write_u32_slice(&self.harvest_ticks);
     }
 }
 
@@ -267,6 +292,10 @@ pub fn slot_is_clear(c: &Components, i: EntityIndex) -> bool {
         && c.target[n] == OptionalHandle::NONE
         && c.stuck_ticks[n] == 0
         && c.path[n] == PathSlot::EMPTY
+        && c.resource_left[n] == 0
+        && c.cargo[n] == 0
+        && c.harvest_target[n] == OptionalHandle::NONE
+        && c.harvest_ticks[n] == 0
 }
 
 #[cfg(test)]

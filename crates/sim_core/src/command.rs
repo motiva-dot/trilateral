@@ -327,6 +327,7 @@ mod tests {
                 owner: PlayerId(0),
                 pos: FixedVec2::ZERO,
                 hp: 100,
+                resource: 0,
             })
             .unwrap();
         let theirs = s
@@ -335,6 +336,7 @@ mod tests {
                 owner: PlayerId(1),
                 pos: FixedVec2::from_ints(10, 10),
                 hp: 100,
+                resource: 0,
             })
             .unwrap();
         let neutral = s
@@ -343,6 +345,7 @@ mod tests {
                 owner: PlayerId::NEUTRAL,
                 pos: FixedVec2::from_ints(5, 5),
                 hp: 1500,
+                resource: 0,
             })
             .unwrap();
         (s, mine, theirs, neutral)

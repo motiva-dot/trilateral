@@ -119,6 +119,41 @@ fn heuristic(a: Tile, b: Tile) -> u32 {
 /// Returns tiles from start to goal inclusive, or `None` if unreachable.
 /// `None` rather than a best-effort partial path: a unit that cannot reach its
 /// destination should be told so and settle, not walk hopefully into a wall.
+/// The nearest walkable tile to `goal`, searching outward in fixed rings.
+///
+/// A destination can legitimately be unwalkable: a worker sent to a resource
+/// node, or a player right-clicking onto a building. Refusing to move in that
+/// case reads as a broken order rather than as a rule, so the unit walks as
+/// close as it can get.
+///
+/// Rings are scanned smallest-first and each ring in a fixed order, so the
+/// chosen tile is a property of the map rather than of iteration luck.
+pub fn nearest_walkable(grid: &MacroGrid, goal: Tile, max_ring: i32) -> Option<Tile> {
+    if grid.is_walkable(goal) {
+        return Some(goal);
+    }
+    for ring in 1..=max_ring {
+        for dy in -ring..=ring {
+            for dx in -ring..=ring {
+                // Perimeter only; the interior was covered by smaller rings.
+                if dx.abs() != ring && dy.abs() != ring {
+                    continue;
+                }
+                let x = goal.x as i32 + dx;
+                let y = goal.y as i32 + dy;
+                if x < 0 || y < 0 || x >= grid.width() as i32 || y >= grid.height() as i32 {
+                    continue;
+                }
+                let t = Tile::new(x as u16, y as u16);
+                if grid.is_walkable(t) {
+                    return Some(t);
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn find_path(
     grid: &MacroGrid,
     scratch: &mut PathScratch,

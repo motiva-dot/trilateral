@@ -26,6 +26,7 @@ use crate::entity::EntityAllocator;
 use crate::grid::MacroGrid;
 use crate::hash::SimHasher;
 use crate::ids::{ArchetypeId, EntityHandle, PlayerId};
+use crate::player::PlayerState;
 use crate::rng::SimRng;
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -35,6 +36,7 @@ pub struct SimState {
     pub rng: SimRng,
     pub entities: EntityAllocator,
     pub c: Components,
+    pub players: Box<[PlayerState]>,
     pub grid: MacroGrid,
     pub cmd_log: CommandLog,
 }
@@ -47,6 +49,12 @@ pub struct Spawn {
     pub owner: PlayerId,
     pub pos: FixedVec2,
     pub hp: i32,
+    /// Starting contents of a resource node. Zero for everything else.
+    ///
+    /// Carried on the spawn rather than filled in afterwards so a node is
+    /// never briefly alive and empty — a worker ticking in that window would
+    /// see a mined-out node and stand down.
+    pub resource: u32,
 }
 
 impl SimState {
@@ -67,6 +75,8 @@ impl SimState {
             rng: SimRng::from_seed(seed),
             entities: EntityAllocator::with_capacity(capacities.max_entities),
             c: Components::new(capacities.max_entities),
+            players: vec![PlayerState::default(); capacities.max_players as usize]
+                .into_boxed_slice(),
             grid: MacroGrid::new(world_tiles, world_tiles),
             cmd_log: CommandLog::with_reserve(capacities.command_log_reserve),
         }
@@ -102,6 +112,7 @@ impl SimState {
         self.c.owner[i] = s.owner;
         self.c.pos[i] = s.pos;
         self.c.hp[i] = s.hp;
+        self.c.resource_left[i] = s.resource;
         Some(h)
     }
 
@@ -150,6 +161,9 @@ impl SimState {
         }
         self.entities.hash_into(&mut h);
         self.c.hash_into(&mut h);
+        for p in &self.players {
+            p.hash_into(&mut h);
+        }
         self.grid.hash_into(&mut h);
         self.cmd_log.hash_into(&mut h);
         h.finish()
@@ -179,6 +193,7 @@ mod tests {
             owner: PlayerId(owner),
             pos: FixedVec2::from_ints(x, y),
             hp: 100,
+            resource: 0,
         }
     }
 
@@ -216,6 +231,7 @@ mod tests {
                 owner: PlayerId((i % 3) as u8),
                 pos: FixedVec2::from_ints(i % 64, i / 64),
                 hp: 50 + (i % 7) * 10,
+                resource: 0,
             };
             s.spawn(sp).expect("capacity is 2048");
         }
