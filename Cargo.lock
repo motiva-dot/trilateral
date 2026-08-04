@@ -195,6 +195,7 @@ name = "sim_systems"
 version = "0.1.0"
 dependencies = [
  "sim_core",
+ "trilateral_fixed",
 ]
 
 [[package]]

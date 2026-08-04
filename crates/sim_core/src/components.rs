@@ -48,6 +48,9 @@ pub struct Components {
     pub pos: Box<[FixedVec2]>,
     pub facing: Box<[FixedAngle]>,
     pub vel: Box<[FixedVec2]>,
+    /// Move destination. Meaningful only while `state` is `Moving`; cleared
+    /// to ZERO otherwise so a stale destination cannot resurrect movement.
+    pub dest: Box<[FixedVec2]>,
     pub hp: Box<[i32]>,
     pub shields: Box<[i32]>,
     pub incoming_dmg: Box<[i32]>,
@@ -67,6 +70,7 @@ impl Components {
             pos: vec![FixedVec2::ZERO; n].into_boxed_slice(),
             facing: vec![FixedAngle::ZERO; n].into_boxed_slice(),
             vel: vec![FixedVec2::ZERO; n].into_boxed_slice(),
+            dest: vec![FixedVec2::ZERO; n].into_boxed_slice(),
             hp: vec![0i32; n].into_boxed_slice(),
             shields: vec![0i32; n].into_boxed_slice(),
             incoming_dmg: vec![0i32; n].into_boxed_slice(),
@@ -92,6 +96,7 @@ impl Components {
         self.pos[n] = FixedVec2::ZERO;
         self.facing[n] = FixedAngle::ZERO;
         self.vel[n] = FixedVec2::ZERO;
+        self.dest[n] = FixedVec2::ZERO;
         self.hp[n] = 0;
         self.shields[n] = 0;
         self.incoming_dmg[n] = 0;
@@ -113,6 +118,7 @@ impl Components {
             h.write_u32(v.to_bits());
         }
         hash_vec2s(h, &self.vel);
+        hash_vec2s(h, &self.dest);
         h.write_i32_slice(&self.hp);
         h.write_i32_slice(&self.shields);
         h.write_i32_slice(&self.incoming_dmg);
@@ -146,6 +152,7 @@ pub fn slot_is_clear(c: &Components, i: EntityIndex) -> bool {
         && c.pos[n] == FixedVec2::ZERO
         && c.facing[n] == FixedAngle::ZERO
         && c.vel[n] == FixedVec2::ZERO
+        && c.dest[n] == FixedVec2::ZERO
         && c.hp[n] == 0
         && c.shields[n] == 0
         && c.incoming_dmg[n] == 0
