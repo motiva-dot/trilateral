@@ -38,7 +38,7 @@ pub use bitset::BitSet;
 pub use capacities::{Capacities, CapacityError};
 pub use clock::{SimClock, Tick};
 pub use command::{AbilityId, AbilityTarget, Command, CommandLog, IssuedCommand, Reject};
-pub use components::{Components, UnitState};
+pub use components::{Components, PathSlot, UnitState};
 pub use entity::EntityAllocator;
 pub use grid::{MacroGrid, Tile};
 pub use hash::SimHasher;

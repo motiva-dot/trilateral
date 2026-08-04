@@ -258,6 +258,8 @@ pub struct SteeringParams {
     pub settle_progress_fraction: Fixed,
     /// Hard bound on neighbours resolved per unit per tick.
     pub max_neighbours: u16,
+    /// Hard bound on A* searches started per tick, across all units.
+    pub max_paths_per_tick: u16,
 }
 
 impl Default for SteeringParams {
@@ -270,6 +272,7 @@ impl Default for SteeringParams {
             settle_stuck_ticks: 12,
             settle_progress_fraction: Fixed::from_ratio(25, 100),
             max_neighbours: 16,
+            max_paths_per_tick: 16,
         }
     }
 }

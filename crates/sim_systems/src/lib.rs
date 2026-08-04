@@ -25,6 +25,7 @@
 
 pub mod movement;
 pub mod path;
+pub mod pathing;
 pub mod spatial;
 pub mod steering;
 
@@ -48,10 +49,15 @@ pub struct SimContext {
     /// `steering`, consumed by `movement` — which is the single place
     /// positions are ever written.
     pub separation: Vec<FixedVec2>,
+    /// A* buffers, sized to the map once (§1.4).
+    pub path_scratch: crate::path::PathScratch,
+    /// Reused by the pathfinder for one search.s output.
+    pub path_out: Vec<sim_core::Tile>,
+    pub path_indices: Vec<u32>,
 }
 
 impl SimContext {
-    pub fn new(world_tiles: i32, reg: &Registries, capacity: u32) -> SimContext {
+    pub fn new(world_tiles: i32, reg: &Registries, capacity: u32, tile_count: u32) -> SimContext {
         // TECH_SPEC §4: cell = 2x the largest collider in the REGISTRY, not
         // among spawned units — a cell size that changed with the contents of
         // the map would change query results and therefore gameplay.
@@ -66,6 +72,9 @@ impl SimContext {
             query_scratch: Vec::with_capacity(256),
             // Sized once at match start (§1.4); never grows afterwards.
             separation: vec![FixedVec2::ZERO; capacity as usize],
+            path_scratch: crate::path::PathScratch::new(tile_count),
+            path_out: Vec::with_capacity(256),
+            path_indices: Vec::with_capacity(64),
         }
     }
 }
@@ -88,7 +97,8 @@ pub fn tick(state: &mut SimState, reg: &Registries, ctx: &mut SimContext) {
     //  9. modifier_pipeline   — Phase 7
     // 10. production_tick     — Phase 6
     // 11. economy_tick        — Phase 6
-    // 12. pathfinding         — Phase 4
+    // 12. pathfinding — hand routes to movers that need one.
+    pathing::pathfinding(state, reg, ctx);
     // 13. steering — local separation into ctx.separation.
     steering::steering(state, reg, ctx);
     // 14. movement            — integrate, clamp, reindex.
@@ -126,7 +136,7 @@ mod tests {
     fn a_tick_advances_the_clock_by_exactly_one() {
         let reg = Registries::default();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         for expected in 1..=10u64 {
             tick(&mut s, &reg, &mut ctx);
             assert_eq!(s.clock.tick.0, expected);
@@ -138,8 +148,8 @@ mod tests {
         let reg = Registries::default();
         let mut a = SimState::new(caps(), 7, 64);
         let mut b = SimState::new(caps(), 7, 64);
-        let mut ca = SimContext::new(128, &reg, caps().max_entities);
-        let mut cb = SimContext::new(128, &reg, caps().max_entities);
+        let mut ca = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
+        let mut cb = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         for _ in 0..100 {
             tick(&mut a, &reg, &mut ca);
             tick(&mut b, &reg, &mut cb);
@@ -151,7 +161,7 @@ mod tests {
     fn the_spatial_index_tracks_entities_across_ticks() {
         let reg = Registries::default();
         let mut s = SimState::new(caps(), 1, 64);
-        let mut ctx = SimContext::new(128, &reg, caps().max_entities);
+        let mut ctx = SimContext::new(128, &reg, caps().max_entities, 64 * 64);
         s.spawn(Spawn {
             archetype: ArchetypeId(0),
             owner: PlayerId(0),

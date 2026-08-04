@@ -57,7 +57,12 @@ fn main() {
             .expect("assets/data/steering.yaml must be valid"),
     };
     let mut state = SimState::new(caps, seed, WORLD_TILES as u16);
-    let mut ctx = SimContext::new(WORLD_TILES, &reg, state.capacities.max_entities);
+    let mut ctx = SimContext::new(
+        WORLD_TILES,
+        &reg,
+        state.capacities.max_entities,
+        state.grid.tile_count(),
+    );
     populate(&mut state, &reg);
 
     let mut report = String::new();
