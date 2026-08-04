@@ -21,6 +21,7 @@ struct VsOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) local: vec2<f32>,
     @location(1) colour: vec4<f32>,
+    @location(2) @interpolate(flat) shape: f32,
 };
 
 @vertex
@@ -29,6 +30,7 @@ fn vs(
     @location(0) ndc: vec2<f32>,
     @location(1) half_extent: vec2<f32>,
     @location(2) colour: vec4<f32>,
+    @location(3) shape: f32,
 ) -> VsOut {
     var corners = array<vec2<f32>, 6>(
         vec2<f32>(-1.0, -1.0), vec2<f32>( 1.0, -1.0), vec2<f32>( 1.0,  1.0),
@@ -39,11 +41,16 @@ fn vs(
     out.pos = vec4<f32>(ndc + c * half_extent, 0.0, 1.0);
     out.local = c;
     out.colour = colour;
+    out.shape = shape;
     return out;
 }
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    if (in.shape > 0.5) {
+        // Square: the quad already is one.
+        return in.colour;
+    }
     let d = length(in.local);
     if (d > 1.0) {
         discard;
@@ -133,7 +140,7 @@ impl Renderer {
                     array_stride: std::mem::size_of::<Instance>() as u64,
                     step_mode: wgpu::VertexStepMode::Instance,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x2, 1 => Float32x2, 2 => Float32x4
+                        0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32
                     ],
                 })],
             },
@@ -162,6 +169,8 @@ impl Renderer {
                     ndc: [0.0, 0.0],
                     half: [0.0, 0.0],
                     colour: [0.0; 4],
+                    shape: 0.0,
+                    _pad: [0.0; 3],
                 };
                 instance_cap
             ]),

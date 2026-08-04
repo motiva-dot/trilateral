@@ -43,6 +43,32 @@ const MARKER_TICKS: u64 = 12;
 /// Camera pan speed, tiles per second at zoom 1.
 const PAN_TILES_PER_SEC: f64 = 24.0;
 
+/// Where the n-th selected unit should stand, relative to the click.
+///
+/// Concentric rings: one unit at the centre, then 6, then 12, and so on. Rings
+/// rather than a square block because a group approaching from any direction
+/// fills a ring evenly, whereas a block always has a corner that arrives last.
+fn ring_offset(n: usize) -> (f64, f64) {
+    if n == 0 {
+        return (0.0, 0.0);
+    }
+    // Spacing is a little over one unit diameter so arrivals do not overlap.
+    const SPACING: f64 = 1.1;
+    let mut ring = 1usize;
+    let mut first = 1usize;
+    loop {
+        let count = ring * 6;
+        if n < first + count {
+            let k = n - first;
+            let angle = (k as f64) / (count as f64) * std::f64::consts::TAU;
+            let r = ring as f64 * SPACING;
+            return (r * angle.cos(), r * angle.sin());
+        }
+        first += count;
+        ring += 1;
+    }
+}
+
 #[derive(Default)]
 struct Held {
     left: bool,
@@ -66,12 +92,27 @@ pub struct DebugApp {
     drag_from: Option<[f64; 2]>,
     /// Frame-0 click marker: where, and the tick it expires.
     marker: Option<([f64; 2], u64)>,
+    /// Blocked tile centres, captured once. Terrain does not change yet;
+    /// when building placement lands (Phase 6) this needs invalidating.
+    terrain: Vec<[f64; 2]>,
     paused: bool,
 }
 
 impl DebugApp {
     pub fn new(state: SimState, reg: Registries, world_tiles: i32) -> DebugApp {
         let capacity = state.c.capacity();
+        // Draw the walls, or units appear to avoid nothing — which reads as a
+        // pathing bug rather than as pathing working.
+        let mut terrain = Vec::new();
+        for y in 0..state.grid.height() {
+            for x in 0..state.grid.width() {
+                let t = sim_core::Tile::new(x, y);
+                if !state.grid.is_terrain_walkable(t) {
+                    let c = state.grid.tile_centre(t);
+                    terrain.push([c.x.to_f64(), c.y.to_f64()]);
+                }
+            }
+        }
         let ctx = SimContext::new(world_tiles, &reg, capacity, state.grid.tile_count());
         let mut view = RenderState::new(capacity);
         view.capture(&state, &reg);
@@ -91,6 +132,7 @@ impl DebugApp {
             cursor: [0.0, 0.0],
             drag_from: None,
             marker: None,
+            terrain,
             paused: false,
         }
     }
@@ -142,9 +184,23 @@ impl DebugApp {
         self.marker = Some((world, self.state.clock.tick.0 + MARKER_TICKS));
 
         let at = Tick(self.state.clock.tick.0 + INPUT_DELAY_TICKS);
-        let target = FixedVec2::new(Fixed::from_f64(world[0]), Fixed::from_f64(world[1]));
         let selected: Vec<u32> = self.view.selected.clone();
-        for idx in selected {
+        for (slot, idx) in selected.into_iter().enumerate() {
+            // FORMATION SPREAD. Every unit gets its OWN destination, laid out
+            // in a ring pattern around the click.
+            //
+            // Sending forty units to one identical point makes them arrive as
+            // a scrum and rely entirely on the settle rule to sort themselves
+            // out — which works, but looks like a pile-up rather than an army
+            // taking position. Spreading the destinations is a presentation
+            // concern: selection lives here, the simulation only ever sees N
+            // ordinary independent Move commands, and a bot issuing orders
+            // does its own layout.
+            let (ox, oy) = ring_offset(slot);
+            let target = FixedVec2::new(
+                Fixed::from_f64(world[0] + ox),
+                Fixed::from_f64(world[1] + oy),
+            );
             // One command per entity — see sim_core::command.
             let Some(h) = self.state.entities.iter_live().find(|h| h.index == idx) else {
                 continue;
@@ -167,16 +223,30 @@ impl DebugApp {
         self.camera.viewport = [w as f32, h as f32];
 
         let alpha = self.accum.alpha();
-        let mut frame: Vec<Instance> = self.view.instances(&self.camera, alpha).to_vec();
+        let mut frame: Vec<Instance> = Vec::with_capacity(self.terrain.len() + 1024);
+
+        // Terrain first, so units draw on top of it.
+        let scale = self.camera.tile_to_ndc_scale();
+        for t in &self.terrain {
+            frame.push(Instance {
+                ndc: self.camera.world_to_ndc(*t),
+                half: [0.5 * scale[0], 0.5 * scale[1]],
+                colour: [0.20, 0.20, 0.24, 1.0],
+                shape: 1.0,
+                _pad: [0.0; 3],
+            });
+        }
+        frame.extend_from_slice(self.view.instances(&self.camera, alpha));
 
         // The click marker, drawn last so it sits on top. Presentation-only —
         // it is not in SimState and never will be.
         if let Some((at, _)) = self.marker {
-            let scale = self.camera.tile_to_ndc_scale();
             frame.push(Instance {
                 ndc: self.camera.world_to_ndc(at),
                 half: [0.35 * scale[0], 0.35 * scale[1]],
                 colour: [1.0, 1.0, 0.55, 0.85],
+                shape: 0.0,
+                _pad: [0.0; 3],
             });
         }
         renderer.render(&frame);

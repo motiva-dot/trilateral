@@ -260,6 +260,9 @@ pub struct SteeringParams {
     pub max_neighbours: u16,
     /// Hard bound on A* searches started per tick, across all units.
     pub max_paths_per_tick: u16,
+    /// Pushes below this are dropped to zero, which is what guarantees a
+    /// crowd reaches exact stillness rather than cycling forever.
+    pub min_push: Fixed,
 }
 
 impl Default for SteeringParams {
@@ -273,6 +276,7 @@ impl Default for SteeringParams {
             settle_progress_fraction: Fixed::from_ratio(25, 100),
             max_neighbours: 16,
             max_paths_per_tick: 16,
+            min_push: Fixed::from_ratio(1, 4096),
         }
     }
 }

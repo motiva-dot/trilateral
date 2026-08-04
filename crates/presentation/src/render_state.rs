@@ -25,6 +25,11 @@ pub struct Instance {
     /// window does not turn circles into ellipses.
     pub half: [f32; 2],
     pub colour: [f32; 4],
+    /// 0 = circle (units), 1 = square (terrain). Walls drawn as circles read
+    /// as scattered blobs rather than as a wall, which is worse than not
+    /// drawing them at all.
+    pub shape: f32,
+    pub _pad: [f32; 3],
 }
 
 /// One entity's drawable values at a single tick.
@@ -114,6 +119,8 @@ impl RenderState {
                 ndc: camera.world_to_ndc([x, y]),
                 half: [(c.radius as f32) * scale[0], (c.radius as f32) * scale[1]],
                 colour: owner_colour(c.owner, selected),
+                shape: 0.0,
+                _pad: [0.0; 3],
             });
         }
         &self.instances

@@ -122,6 +122,26 @@ pub fn steering(state: &SimState, reg: &Registries, ctx: &mut SimContext) {
             ctx.separation[j as usize] += axis.scale(move_j);
         }
     }
+
+    // DEADBAND. Drop pushes too small to matter, so a crowd terminates.
+    //
+    // Separation is not a pure pairwise force once `max_neighbours` bites: in
+    // a dense pile a unit resolves against only some of its overlaps, the
+    // forces are unbalanced, and the configuration can rotate forever without
+    // reaching zero. Measured with 150 units ordered onto one point, the crowd
+    // was still moving after 30,000 ticks.
+    //
+    // The deadband makes termination structural rather than hoped-for: once
+    // every push is below it, nothing moves, permanently and bit-exactly. The
+    // cost is that sub-threshold overlaps persist — at the default 1/4096 of a
+    // tile, roughly 0.008 pixels at normal zoom.
+    if p.min_push > Fixed::ZERO {
+        for s in ctx.separation.iter_mut() {
+            if !s.is_zero() && s.length() < p.min_push {
+                *s = FixedVec2::ZERO;
+            }
+        }
+    }
 }
 
 #[inline]

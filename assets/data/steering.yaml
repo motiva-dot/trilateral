@@ -54,3 +54,17 @@ max_neighbours: 16
 # formation. Raise it if large armies feel sluggish to react; lower it if the
 # pathfinding shows up in the per-tick budget (TECH_SPEC §9: 1.5ms at 1,200).
 max_paths_per_tick: 16
+
+# Minimum separation push, in tiles. Below this, a unit is left alone.
+#
+# WHY THIS EXISTS. Separation is not a pure pairwise force once `max_neighbours`
+# bites: in a dense pile a unit resolves against only some of its overlaps, so
+# the forces are not balanced and the configuration can rotate forever without
+# ever reaching zero. Measured with 150 units ordered onto one point, the crowd
+# was still moving after 30,000 ticks.
+#
+# A deadband makes termination structural rather than hoped-for: once every
+# push is below it, nothing moves, permanently and bit-exactly. The cost is
+# that overlaps smaller than this persist — at 1/4096 of a tile that is 0.008
+# pixels at normal zoom, which is not a visual artefact by any measure.
+min_push: 0.000244

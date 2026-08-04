@@ -17,6 +17,7 @@ struct RawSteering {
     settle_progress_fraction: f64,
     max_neighbours: u16,
     max_paths_per_tick: u16,
+    min_push: f64,
 }
 
 pub fn steering_from_yaml(src: &str) -> Result<SteeringParams, ContentError> {
@@ -52,6 +53,7 @@ pub fn steering_from_yaml(src: &str) -> Result<SteeringParams, ContentError> {
         settle_progress_fraction: Fixed::from_f64(raw.settle_progress_fraction),
         max_neighbours: raw.max_neighbours,
         max_paths_per_tick: raw.max_paths_per_tick,
+        min_push: Fixed::from_f64(raw.min_push),
     })
 }
 
